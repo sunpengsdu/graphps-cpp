@@ -16,7 +16,10 @@ template<class T>
 class PagerankPS : public GraphPS<T> {
 public:
     PagerankPS():GraphPS<T>() {
-        this->_comp = comp_pagerank<T>;
+        // this->_comp = comp_pagerank<T>;
+        this->_comp = comp_ssp<T>;
+        // this->_comp = comp_cc<T>;
+
     }
     void init_vertex() {
         this->load_vertex_out();
@@ -36,7 +39,6 @@ int main(int argc, char *argv[]) {
     finalize_workers();
     return 0;
 }
-
 
 //#
 //#DataPath = '/home/mapred/GraphData/uk/edge3/'
@@ -58,4 +60,3 @@ int main(int argc, char *argv[]) {
 //#DataPath = '/home/mapred/GraphData/eu/edge/'
 //#VertexNum = 1070560000
 //#PartitionNum = 5096
-

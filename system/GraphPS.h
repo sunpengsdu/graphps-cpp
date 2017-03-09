@@ -38,7 +38,7 @@ bool comp_pagerank(const int32_t P_ID,
     result[end_id-start_id+2] = start_id%10000;
     result[end_id-start_id+1] = std::floor(end_id*1.0/10000);
     result[end_id-start_id+0] = end_id%10000;
-	
+
     // LOG(INFO) << end_id << " " << start_id;
 
     int32_t i   = 0;
@@ -53,10 +53,109 @@ bool comp_pagerank(const int32_t P_ID,
         rel += VertexData[tmp]/_VertexOut[tmp];
       }
       result[i] = (rel*0.85 + 1.0/vertex_num) - VertexData[start_id+i];
-      if (std::abs(result[i] < 0.00000001))
-         result[i] = 0;
+      // if (std::abs(result[i] < 0.00000001))
+      //    result[i] = 0;
     }
 
+    EdgeDataNpy.destruct();
+    char *c_result = reinterpret_cast<char*>(&result[0]);
+    graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+    return true;
+}
+
+template<class T>
+bool comp_sssp(const int32_t P_ID,
+        std::string DataPath,
+        const int32_t VertexNum,
+        const T* VertexData,
+        const int32_t* _VertexOut,
+        const int32_t* _VertexIn) {
+    omp_set_dynamic(0);
+    omp_set_num_threads(OMPNUM);
+    DataPath += std::to_string(P_ID);
+    DataPath += ".edge.npy";
+    // LOG(INFO) << "Processing " << DataPath;
+    cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
+    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
+    int32_t start_id = EdgeData[3];
+    int32_t end_id = EdgeData[4];
+    int32_t indices_len = EdgeData[1];
+    int32_t indptr_len = EdgeData[2];
+    int32_t * indices = EdgeData + 5;
+    int32_t * indptr = EdgeData + 5 + indices_len;
+    int32_t vertex_num = VertexNum;
+    std::vector<T> result(end_id-start_id+5, 0);
+    result[end_id-start_id+4] = P_ID;
+    result[end_id-start_id+3] = std::floor(start_id*1.0/10000);
+    result[end_id-start_id+2] = start_id%10000;
+    result[end_id-start_id+1] = std::floor(end_id*1.0/10000);
+    result[end_id-start_id+0] = end_id%10000;
+
+    // LOG(INFO) << end_id << " " << start_id;
+    int32_t i   = 0;
+    int32_t j   = 0;
+    int32_t   min = 0;
+    omp_set_dynamic(0);
+    omp_set_num_threads(OMPNUM);
+    #pragma omp parallel for private(j, min) schedule(dynamic)
+        for (i = 0; i < end_id-start_id; i++) {
+            min = VertexData[start_id+i];
+            for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
+                if (min > VertexData[indices[indptr[i]+j]] + 1)
+                    min = VertexData[indices[indptr[i] + j]] + 1;
+            }
+        value[i] = min - VertexData[start_id+i];
+    }
+    EdgeDataNpy.destruct();
+    char *c_result = reinterpret_cast<char*>(&result[0]);
+    graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+    return true;
+}
+
+
+template<class T>
+bool comp_cc(const int32_t P_ID,
+        std::string DataPath,
+        const int32_t VertexNum,
+        const T* VertexData,
+        const int32_t* _VertexOut,
+        const int32_t* _VertexIn) {
+    omp_set_dynamic(0);
+    omp_set_num_threads(OMPNUM);
+    DataPath += std::to_string(P_ID);
+    DataPath += ".edge.npy";
+    // LOG(INFO) << "Processing " << DataPath;
+    cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
+    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
+    int32_t start_id = EdgeData[3];
+    int32_t end_id = EdgeData[4];
+    int32_t indices_len = EdgeData[1];
+    int32_t indptr_len = EdgeData[2];
+    int32_t * indices = EdgeData + 5;
+    int32_t * indptr = EdgeData + 5 + indices_len;
+    int32_t vertex_num = VertexNum;
+    std::vector<T> result(end_id-start_id+5, 0);
+    result[end_id-start_id+4] = P_ID;
+    result[end_id-start_id+3] = std::floor(start_id*1.0/10000);
+    result[end_id-start_id+2] = start_id%10000;
+    result[end_id-start_id+1] = std::floor(end_id*1.0/10000);
+    result[end_id-start_id+0] = end_id%10000;
+
+    // LOG(INFO) << end_id << " " << start_id;
+    int32_t i   = 0;
+    int32_t j   = 0;
+    int32_t   max = 0;
+    omp_set_dynamic(0);
+    omp_set_num_threads(OMPNUM);
+    #pragma omp parallel for private(j, max) schedule(dynamic)
+        for (i = 0; i < end_id-start_id; i++) {
+            max = VertexData[start_id+i];
+            for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
+                if (max < VertexData[indices[indptr[i]+j]])
+                    max = VertexData[indices[indptr[i] + j]];
+            }
+        value[i] = max - VertexData[start_id+i];
+    }
     EdgeDataNpy.destruct();
     char *c_result = reinterpret_cast<char*>(&result[0]);
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
@@ -182,7 +281,7 @@ void GraphPS<T>::run() {
         for (int32_t P_ID = _PartitionID_Start; P_ID < _PartitionID_End; P_ID++) {
             barrier_threadpool(comp_pool, _ThreadNum-1);
 	    // LOG(INFO) << "Partition: " << P_ID;
-            comp_pool.push_back(std::async(std::launch::async, 
+            comp_pool.push_back(std::async(std::launch::async,
 				      _comp,
                                       P_ID,
                                       _DataPath,
