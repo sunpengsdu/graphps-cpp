@@ -10,10 +10,7 @@
 
 #include "Global.h"
 #include "Communication.h"
-#include <mutex>
 
-std::unordered_map<int32_t, cnpy::NpyArray> _EdgeCache;
-std::mutex _EdgeCache_mutex;
 
 template<class T>
 bool comp_pagerank(const int32_t P_ID,
@@ -28,9 +25,9 @@ bool comp_pagerank(const int32_t P_ID,
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
-    cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
+    char* EdgeDataNpy = load_edge(P_ID, DataPath);
 
-    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
+    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
     int32_t start_id = EdgeData[3];
     int32_t end_id = EdgeData[4];
     int32_t indices_len = EdgeData[1];
@@ -62,8 +59,7 @@ bool comp_pagerank(const int32_t P_ID,
       // if (std::abs(result[i] < 0.00000001))
       //    result[i] = 0;
     }
-
-    EdgeDataNpy.destruct();
+    clean_edge(P_ID, EdgeDataNpy);
     char *c_result = reinterpret_cast<char*>(&result[0]);
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     return true;
@@ -82,9 +78,9 @@ bool comp_sssp(const int32_t P_ID,
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
-    cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
+    char* EdgeDataNpy = load_edge(P_ID, DataPath);
 
-    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
+    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
     int32_t start_id = EdgeData[3];
     int32_t end_id = EdgeData[4];
     int32_t indices_len = EdgeData[1];
@@ -114,7 +110,7 @@ bool comp_sssp(const int32_t P_ID,
             }
         result[i] = min - VertexData[start_id+i];
     }
-    EdgeDataNpy.destruct();
+    clean_edge(P_ID, EdgeDataNpy);
     char *c_result = reinterpret_cast<char*>(&result[0]);
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     return true;
@@ -134,8 +130,9 @@ bool comp_cc(const int32_t P_ID,
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
-    cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
-    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
+    char* EdgeDataNpy = load_edge(P_ID, DataPath);
+    
+    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
     int32_t start_id = EdgeData[3];
     int32_t end_id = EdgeData[4];
     int32_t indices_len = EdgeData[1];
@@ -166,7 +163,7 @@ bool comp_cc(const int32_t P_ID,
         }
         result[i] = max - VertexData[start_id+i];
     }
-    EdgeDataNpy.destruct();
+    clean_edge(P_ID, EdgeDataNpy);
     char *c_result = reinterpret_cast<char*>(&result[0]);
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     return true;
@@ -249,6 +246,7 @@ void GraphPS<T>::init(std::string DataPath,
     _PartitionID_End = ((1+_my_rank)*n > _PartitionNum) ? _PartitionNum:(1+_my_rank)*n;
     LOG(INFO) << "Rank " << _my_rank << " "
             << " With Partitions From " << _PartitionID_Start << " To " << _PartitionID_End;
+    _EdgeCache.reserve(_PartitionNum*2/_num_workers);
 }
 
 template<class T>

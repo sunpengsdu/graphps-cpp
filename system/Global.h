@@ -11,6 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
+#include <glog/logging.h>
+#include <zmq.h>
+#include <snappy.h>
+#include <omp.h>
+#include <sched.h>
 #include <iostream>
 #include <cmath>
 #include <thread>
@@ -19,11 +24,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <future>
-#include <glog/logging.h>
-#include <zmq.h>
-#include <snappy.h>
-#include <omp.h>
-#include <sched.h>
+#include <atomic>
 #include "cnpy.h"
 
 #define MASTER_RANK 0
@@ -33,6 +34,7 @@
 #define ZMQ_BUFFER 20*1024*1024
 #define OMPNUM 3
 #define GPS_INF 10000
+#define EDGE_CACHE_SIZE 60*1024*1024*1024 //GB
 //typedef int32_t VertexType;
 //typedef int32_t PartitionIDType;
 
@@ -49,14 +51,31 @@ std::chrono::steady_clock::time_point COMP_TIME_START;
 std::chrono::steady_clock::time_point COMP_TIME_END;
 std::chrono::steady_clock::time_point APP_TIME_START;
 std::chrono::steady_clock::time_point APP_TIME_END;
+
 int64_t INIT_TIME;
 int64_t COMP_TIME;
 int64_t APP_TIME;
 
-cnpy::NpyArray load_edge(std::string & DataPath) {;
+std::unordered_map<int32_t, char*> _EdgeCache;
+std::atomic<long long> _EdgeCache_Size;
+
+
+char* load_edge(int32_t p_id, std::string & DataPath) {
+    if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
+        return _EdgeCache[p_id];
+    } 
     cnpy::NpyArray npz = cnpy::npy_load(DataPath);
-//    int32_t *data = reinterpret_cast<int32_t*>(npz.data);
-    return npz;
+    unsigned int npz_size = npz.shape[0];
+    if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
+        _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
+        _EdgeCache[p_id] = npz.data;
+    }
+    return npz.data;
+}
+
+void clean_edge(int32_t p_id, char* data) {
+    if (_EdgeCache.find(p_id) == _EdgeCache.end())
+        delete [] (data);
 }
 
 inline int get_worker_id()
@@ -73,6 +92,9 @@ void finalize_workers()
     LOG(INFO) << "Finalizing the application";
     delete [] (_all_hostname);
     zmq_ctx_destroy (_zmq_context);
+    for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
+      delete [] t_it.second;
+    }
     MPI_Finalize();
 }
 
