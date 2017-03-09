@@ -32,9 +32,9 @@
 #define ZMQ_PREFIX "tcp://*:"
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
-#define OMPNUM 3
+#define OMPNUM 2
 #define GPS_INF 10000
-#define EDGE_CACHE_SIZE 60*1024*1024*1024 //GB
+#define EDGE_CACHE_SIZE 60*1024 //MB
 //typedef int32_t VertexType;
 //typedef int32_t PartitionIDType;
 
@@ -57,7 +57,8 @@ int64_t COMP_TIME;
 int64_t APP_TIME;
 
 std::unordered_map<int32_t, char*> _EdgeCache;
-std::atomic<long long> _EdgeCache_Size;
+std::atomic<int32_t> _EdgeCache_Size;
+std::atomic<int32_t> _Computing_Num;
 
 
 char* load_edge(int32_t p_id, std::string & DataPath) {
@@ -65,7 +66,7 @@ char* load_edge(int32_t p_id, std::string & DataPath) {
         return _EdgeCache[p_id];
     } 
     cnpy::NpyArray npz = cnpy::npy_load(DataPath);
-    unsigned int npz_size = npz.shape[0];
+    int32_t npz_size = std::ceil(npz.shape[0]*1.0/1024/1024);
     if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
         _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
         _EdgeCache[p_id] = npz.data;
@@ -93,7 +94,7 @@ void finalize_workers()
     delete [] (_all_hostname);
     zmq_ctx_destroy (_zmq_context);
     for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
-      delete [] t_it.second;
+      delete [] t_it->second;
     }
     MPI_Finalize();
 }
@@ -148,6 +149,8 @@ void init_workers()
             LOG(INFO) << "Rank " << i << ": " << _all_hostname + HOST_LEN*i;
     }
     _zmq_context = zmq_ctx_new ();
+    _EdgeCache_Size = 0;
+    _Computing_Num = 0;
     barrier_workers();
 }
 

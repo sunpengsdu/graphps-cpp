@@ -20,8 +20,7 @@ bool comp_pagerank(const int32_t P_ID,
         const int32_t* _VertexOut,
         const int32_t* _VertexIn,
         std::vector<bool>& ActiveVector) {
-    omp_set_dynamic(0);
-    omp_set_num_threads(OMPNUM);
+    _Computing_Num++;
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
@@ -48,7 +47,7 @@ bool comp_pagerank(const int32_t P_ID,
     int32_t k   = 0;
     int32_t tmp = 0;
     T   rel = 0;
-    #pragma omp parallel for private(k, tmp, rel) schedule(dynamic)
+    #pragma omp parallel for num_threads(OMPNUM) private(k, tmp, rel) schedule(dynamic)
     for (i=0; i < end_id-start_id; i++) {
       rel = 0;
       for (k = 0; k < indptr[i+1] - indptr[i]; k++) {
@@ -61,6 +60,8 @@ bool comp_pagerank(const int32_t P_ID,
     }
     clean_edge(P_ID, EdgeDataNpy);
     char *c_result = reinterpret_cast<char*>(&result[0]);
+
+    _Computing_Num--;
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     return true;
 }
@@ -73,8 +74,7 @@ bool comp_sssp(const int32_t P_ID,
         const int32_t* _VertexOut,
         const int32_t* _VertexIn,
         std::vector<bool>& ActiveVector) {
-    omp_set_dynamic(0);
-    omp_set_num_threads(OMPNUM);
+    _Computing_Num++;
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
@@ -99,9 +99,7 @@ bool comp_sssp(const int32_t P_ID,
     int32_t i   = 0;
     int32_t j   = 0;
     T   min = 0;
-    omp_set_dynamic(0);
-    omp_set_num_threads(OMPNUM);
-    #pragma omp parallel for private(j, min) schedule(dynamic)
+    #pragma omp parallel for num_threads(OMPNUM) private(j, min) schedule(dynamic)
     for (i = 0; i < end_id-start_id; i++) {
         min = VertexData[start_id+i];
         for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
@@ -112,6 +110,8 @@ bool comp_sssp(const int32_t P_ID,
     }
     clean_edge(P_ID, EdgeDataNpy);
     char *c_result = reinterpret_cast<char*>(&result[0]);
+
+    _Computing_Num--;
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     return true;
 }
@@ -125,9 +125,7 @@ bool comp_cc(const int32_t P_ID,
         const int32_t* _VertexOut,
         const int32_t* _VertexIn,
         std::vector<bool>& ActiveVector) {
-    omp_set_dynamic(0);
-    omp_set_num_threads(OMPNUM);
-    DataPath += std::to_string(P_ID);
+    _Computing_Num--;
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
     char* EdgeDataNpy = load_edge(P_ID, DataPath);
@@ -151,9 +149,7 @@ bool comp_cc(const int32_t P_ID,
     int32_t i   = 0;
     int32_t j   = 0;
     T   max = 0;
-    omp_set_dynamic(0);
-    omp_set_num_threads(OMPNUM);
-    #pragma omp parallel for private(j, max) schedule(dynamic)
+    #pragma omp parallel for num_threads(OMPNUM) private(j, max) schedule(dynamic)
     for (i = 0; i < end_id-start_id; i++) {
         max = VertexData[start_id+i];
         for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
@@ -165,6 +161,8 @@ bool comp_cc(const int32_t P_ID,
     }
     clean_edge(P_ID, EdgeDataNpy);
     char *c_result = reinterpret_cast<char*>(&result[0]);
+
+    _Computing_Num--;
     graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     return true;
 }
@@ -269,9 +267,8 @@ void  GraphPS<T>::load_vertex_out() {
 
 template<class T>
 void GraphPS<T>::run() {
-    omp_set_dynamic(0);
-    omp_set_num_threads(OMPNUM);
-    std::thread thread_server(graphps_server<T>, std::ref(_VertexDataNew));
+    std::thread thread_server_0(graphps_server<T>, std::ref(_VertexDataNew), 0);
+    std::thread thread_server_1(graphps_server<T>, std::ref(_VertexDataNew), 1);
     barrier_workers();
     stop_time_init();
     if (_my_rank==0)
@@ -287,10 +284,13 @@ void GraphPS<T>::run() {
         start_time_comp();
 	memset(_VertexDataNew.data(), 0, sizeof(T)*_VertexNum);
         for (int32_t P_ID = _PartitionID_Start; P_ID < _PartitionID_End; P_ID++) {
+       //     while(_Computing_Num > _ThreadNum) {
+       //         graphps_sleep(10);
+       //     }
             barrier_threadpool(comp_pool, _ThreadNum-1);
 	    // LOG(INFO) << "Partition: " << P_ID;
             comp_pool.push_back(std::async(std::launch::async,
-				      _comp,
+				                      _comp,
                                       P_ID,
                                       _DataPath,
                                       _VertexNum,
@@ -299,12 +299,11 @@ void GraphPS<T>::run() {
                                       _VertexIn.data(),
                                       std::ref(_UpdatedLastIter)));
         }
-        barrier_threadpool(comp_pool ,0);
+        barrier_threadpool(comp_pool, 0);
         barrier_workers();
 
         int32_t changed_num = 0;
-        omp_set_num_threads(_ThreadNum*OMPNUM);
-        #pragma omp parallel for reduction (+:changed_num)  schedule(static)
+        #pragma omp parallel for num_threads(_ThreadNum) reduction (+:changed_num)  schedule(static)
         for (int32_t result_id = 0; result_id < _VertexNum; result_id++) {
             _VertexData[result_id] += _VertexDataNew[result_id];
             if (_VertexDataNew[result_id] == 0) {
@@ -323,7 +322,8 @@ void GraphPS<T>::run() {
 	    break;
     }
     graphps_send("!", 1, _my_rank);
-    thread_server.join();
+    thread_server_0.join();
+    thread_server_1.join();
 }
 
 #endif /* GRAPHPS_H_ */

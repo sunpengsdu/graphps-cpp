@@ -45,8 +45,10 @@ int main(int argc, char *argv[]) {
     PagerankPS<double> pg;
     //PagerankPS<float> pg;
     // Data Path, VertexNum number, Partition number, thread number, Max Iteration
-    //pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 10, 10);
-    pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294, 12, 20);
+    //pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 11, 20);
+    //pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294, 11, 20);
+    //pg.init("/home/mapred/GraphData/uk/edge3/", 787803000, 2379, 11, 20);
+    pg.init("/home/mapred/GraphData/web_uk/", 133633040, 300, 11, 20);
     pg.run();
     finalize_workers();
     stop_time_app();
@@ -54,23 +56,3 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-//#
-//#DataPath = '/home/mapred/GraphData/uk/edge3/'
-//#VertexNum = 787803000
-//#PartitionNum = 2379
-//
-//#DataPath = '/home/mapred/GraphData/soc/edge2/'
-//#VertexNum = 4847571
-//#PartitionNum = 14
-//
-//#DataPath = '/home/mapred/GraphData/twitter/edge2/'
-//#VertexNum = 41652250
-//#PartitionNum = 294
-//
-//DataPath = '/home/mapred/GraphData/webuk_3/'
-//VertexNum = 133633040
-//PartitionNum = 300
-//
-//#DataPath = '/home/mapred/GraphData/eu/edge/'
-//#VertexNum = 1070560000
-//#PartitionNum = 5096

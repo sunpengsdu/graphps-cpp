@@ -10,11 +10,11 @@
 
 #include "Global.h"
 
-void zmq_send(const char * data, const int length, const int rank) {
+void zmq_send(const char * data, const int length, const int rank, const int id) {
     std::string dst("tcp://");
     dst += std::string(_all_hostname + rank*HOST_LEN);
     dst += ":";
-    dst += std::to_string(ZMQ_PORT+rank);
+    dst += std::to_string(ZMQ_PORT+id);
     void *requester = zmq_socket (_zmq_context, ZMQ_REQ);
     zmq_connect (requester, dst.c_str());
     char buffer [5];
@@ -27,7 +27,12 @@ void zmq_send(const char * data, const int length, const int rank) {
 void graphps_send(std::string &data, const int length, const int rank) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
-    zmq_send(compressed_data.c_str(), compressed_length, rank);
+    if (length==1 && data[0] =='!') {
+        zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
+        zmq_send(compressed_data.c_str(), compressed_length, rank, 1);
+    } else {
+        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
+    }
 //    zmq_send(data.c_str(), length, rank);
 
 }
@@ -35,7 +40,12 @@ void graphps_send(std::string &data, const int length, const int rank) {
 void graphps_send(const char * data, const int length, const int rank) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
-    zmq_send(compressed_data.c_str(), compressed_length, rank);
+    if (length==1 && *data == '!') {
+        zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
+        zmq_send(compressed_data.c_str(), compressed_length, rank, 1);
+    } else {
+        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
+    }
 //    zmq_send(data, length, rank);
 }
 
@@ -43,7 +53,7 @@ void graphps_sendall(std::string &data, const int length) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
     for (int rank = 0; rank < _num_workers; rank++)
-        zmq_send(compressed_data.c_str(), compressed_length, rank);
+        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
 //       zmq_send(data.c_str(), length, rank);
 
 }
@@ -51,17 +61,19 @@ void graphps_sendall(std::string &data, const int length) {
 void graphps_sendall(const char * data, const int length) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
+    #pragma omp parallel for num_threads(OMPNUM) schedule(static)
     for (int rank = 0; rank < _num_workers; rank++)
-        zmq_send(compressed_data.c_str(), compressed_length, rank);
+        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
 //       zmq_send(data, length, rank);
 }
 
 
 template<class T>
-void graphps_server(std::vector<T>& VertexDataNew) {
+void graphps_server(std::vector<T>& VertexDataNew, int32_t id) {
     //  Socket to talk to clients
     std::string server_addr(ZMQ_PREFIX);
-    server_addr += std::to_string(ZMQ_PORT+_my_rank);
+    // server_addr += std::to_string(ZMQ_PORT+_my_rank);
+    server_addr += std::to_string(ZMQ_PORT+id);
     LOG(INFO) << "Rank " << _my_rank << " Setup ZMQ Server " << server_addr;
     void *responder = zmq_socket (_zmq_context, ZMQ_REP);
     int rc = zmq_bind (responder, server_addr.c_str());
