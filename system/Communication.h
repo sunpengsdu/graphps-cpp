@@ -9,6 +9,8 @@
 #define SYSTEM_COMMUNICATION_H_
 
 #include "Global.h"
+#include <ctime>
+
 
 void zmq_send(const char * data, const int length, const int rank, const int id) {
     std::string dst("tcp://");
@@ -25,46 +27,82 @@ void zmq_send(const char * data, const int length, const int rank, const int id)
 
 //to do design the port
 void graphps_send(std::string &data, const int length, const int rank) {
+    #ifdef SNAPPY_COMPRESS
     std::string compressed_data;
     int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
     if (length==1 && data[0] =='!') {
-        zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
-        zmq_send(compressed_data.c_str(), compressed_length, rank, 1);
+        for (int32_t i = 0; i < ZMQNUM; i++)
+           zmq_send(compressed_data.c_str(), compressed_length, rank, i);
     } else {
-        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
+        std::srand(std::time(0));
+        zmq_send(compressed_data.c_str(), compressed_length, rank, (_my_rank+std::rand())%ZMQNUM);
     }
-//    zmq_send(data.c_str(), length, rank);
+    #else
+    if (length==1 && data[0] =='!') {
+        for (int32_t i = 0; i < ZMQNUM; i++)
+           zmq_send(data.c_str(), length, rank, i);
+    } else {
+        std::srand(std::time(0));
+        zmq_send(data.c_str(), length, rank,  (_my_rank+std::rand())%ZMQNUM);
 
+    }
+    #endif
 }
 
 void graphps_send(const char * data, const int length, const int rank) {
+    #ifdef SNAPPY_COMPRESS
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
     if (length==1 && *data == '!') {
-        zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
-        zmq_send(compressed_data.c_str(), compressed_length, rank, 1);
+        for (int32_t i = 0; i < ZMQNUM; i++)
+           zmq_send(compressed_data.c_str(), compressed_length, rank, i);
     } else {
-        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
+        std::srand(std::time(0));
+        zmq_send(compressed_data.c_str(), compressed_length, rank,  (_my_rank+std::rand())%ZMQNUM);
+
     }
-//    zmq_send(data, length, rank);
+    #else
+    if (length==1 && *data == '!') {
+        for (int32_t i = 0; i < ZMQNUM; i++)
+           zmq_send(data, length, rank, i);
+    } else {
+        std::srand(std::time(0));
+        zmq_send(data, length, rank,  (_my_rank+std::rand())%ZMQNUM);
+
+    }
+    #endif
 }
 
 void graphps_sendall(std::string &data, const int length) {
+    std::srand(std::time(0));
+    #ifdef SNAPPY_COMPRESS
     std::string compressed_data;
     int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
+    #pragma omp parallel for num_threads(OMPNUM) schedule(static)
     for (int rank = 0; rank < _num_workers; rank++)
-        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
-//       zmq_send(data.c_str(), length, rank);
+        zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
 
+    #else
+    #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+    for (int rank = 0; rank < _num_workers; rank++)
+        zmq_send(data.c_str(), length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
+
+    #endif
 }
 
 void graphps_sendall(const char * data, const int length) {
+    std::srand(std::time(0));
+    #ifdef SNAPPY_COMPRESS
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
     #pragma omp parallel for num_threads(OMPNUM) schedule(static)
     for (int rank = 0; rank < _num_workers; rank++)
-        zmq_send(compressed_data.c_str(), compressed_length, rank, rank%2);
-//       zmq_send(data, length, rank);
+        zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
+    #else
+    #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+    for (int rank = 0; rank < _num_workers; rank++)
+        zmq_send(data, length,  (rank+_my_rank)%_num_workers, (_my_rank+std::rand())%ZMQNUM);
+    #endif
 }
 
 
@@ -83,26 +121,29 @@ void graphps_server(std::vector<T>& VertexDataNew, int32_t id) {
         memset(buffer, 0, ZMQ_BUFFER);
         int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
         std::string uncompressed;
+        #ifdef SNAPPY_COMPRESS
         assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
-        zmq_send (responder, "ACK", 3, 0);
+        #else
+        uncompressed.assign(buffer, length);
+        #endif
         if (uncompressed.length() == 1 and uncompressed == "!") {
+            zmq_send (responder, "ACK", 3, 0);
             LOG(INFO) << "Existing the graphps_server";
             zmq_close(responder);
             break;
-        }
-        else {
-//            LOG(INFO) << "Rank " << _my_rank << " ZMQ Receive " << uncompressed.length()
-//                    << " First Data is "<< *(T*)uncompressed.c_str();
+        } else {
             T* raw_data = (T*) uncompressed.c_str();
+            #ifdef SNAPPY_COMPRESS
             int32_t raw_data_len = (uncompressed.size()) / sizeof(T);
+            #else
+            int32_t raw_data_len = length / sizeof(T);
+            #endif
             int32_t partition_id = raw_data[raw_data_len-1];
             int32_t start_id = (int32_t)raw_data[raw_data_len-2]*10000 + (int32_t)raw_data[raw_data_len-3];
             int32_t end_id = (int32_t)raw_data[raw_data_len-4]*10000 + (int32_t)raw_data[raw_data_len-5];
-            //if(end_id-start_id != raw_data_len-5) {
-	    //    LOG(INFO) << raw_data_len << " " << uncompressed.size() << " " << start_id << " " << end_id;
-	    //}
             assert(end_id-start_id == raw_data_len-5);
             memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
+            zmq_send (responder, "ACK", 3, 0);
         }
     }
 }

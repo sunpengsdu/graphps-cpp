@@ -267,8 +267,9 @@ void  GraphPS<T>::load_vertex_out() {
 
 template<class T>
 void GraphPS<T>::run() {
-    std::thread thread_server_0(graphps_server<T>, std::ref(_VertexDataNew), 0);
-    std::thread thread_server_1(graphps_server<T>, std::ref(_VertexDataNew), 1);
+    std::vector<std::thread> zmq_server_pool;
+    for (int32_t i=0; i<ZMQNUM; i++)
+        zmq_server_pool.push_back(std::thread(graphps_server<T>, std::ref(_VertexDataNew), i));
     barrier_workers();
     stop_time_init();
     if (_my_rank==0)
@@ -322,8 +323,9 @@ void GraphPS<T>::run() {
 	    break;
     }
     graphps_send("!", 1, _my_rank);
-    thread_server_0.join();
-    thread_server_1.join();
+
+    for (int32_t i=0; i<ZMQNUM; i++)
+        zmq_server_pool[i].join();
 }
 
 #endif /* GRAPHPS_H_ */
