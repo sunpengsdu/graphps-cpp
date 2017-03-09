@@ -23,7 +23,12 @@ public:
     }
     void init_vertex() {
         this->load_vertex_out();
-        this->_VertexData.assign(this->_VertexNum, 1.0/this->_VertexNum);
+        // this->_VertexData.assign(this->_VertexNum, 1.0/this->_VertexNum);
+        this->_VertexData.assign(this->_VertexNum, GPS_INF);
+        // this->_VertexData.assign(this->_VertexNum, 0);
+        // for (int32_t i = 0; i < this->_VertexNum; i++) {
+        //     this->_VertexData[i] = i;
+        // }
     }
 };
 

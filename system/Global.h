@@ -32,6 +32,7 @@
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
 #define OMPNUM 2
+#define GPS_INF 10000
 //typedef int32_t VertexType;
 //typedef int32_t PartitionIDType;
 
