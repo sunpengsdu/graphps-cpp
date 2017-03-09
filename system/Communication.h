@@ -68,6 +68,7 @@ void graphps_server(std::vector<T>& VertexDataNew) {
     assert (rc == 0);
     char *buffer = new char[ZMQ_BUFFER];
     while (1) {
+        memset(buffer, 0, ZMQ_BUFFER);
         int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
         std::string uncompressed;
         assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
@@ -80,11 +81,15 @@ void graphps_server(std::vector<T>& VertexDataNew) {
         else {
 //            LOG(INFO) << "Rank " << _my_rank << " ZMQ Receive " << uncompressed.length()
 //                    << " First Data is "<< *(T*)uncompressed.c_str();
-            T* raw_data = (T*)uncompressed.c_str();
-            int32_t raw_data_len = uncompressed.length() / sizeof(T);
+            T* raw_data = (T*) uncompressed.c_str();
+            int32_t raw_data_len = (uncompressed.size()) / sizeof(T);
             int32_t partition_id = raw_data[raw_data_len-1];
-            int32_t start_id = raw_data[raw_data_len-2]*10000 + raw_data[raw_data_len-3];
-            int32_t end_id = raw_data[raw_data_len-4]*10000 + raw_data[raw_data_len-5];
+            int32_t start_id = (int32_t)raw_data[raw_data_len-2]*10000 + (int32_t)raw_data[raw_data_len-3];
+            int32_t end_id = (int32_t)raw_data[raw_data_len-4]*10000 + (int32_t)raw_data[raw_data_len-5];
+            //if(end_id-start_id != raw_data_len-5) {
+	    //    LOG(INFO) << raw_data_len << " " << uncompressed.size() << " " << start_id << " " << end_id;
+	    //}
+            assert(end_id-start_id == raw_data_len-5);
             memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
         }
     }

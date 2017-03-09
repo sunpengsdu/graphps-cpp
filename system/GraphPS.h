@@ -10,6 +10,10 @@
 
 #include "Global.h"
 #include "Communication.h"
+#include <mutex>
+
+std::unordered_map<int32_t, cnpy::NpyArray> _EdgeCache;
+std::mutex _EdgeCache_mutex;
 
 template<class T>
 bool comp_pagerank(const int32_t P_ID,
@@ -17,13 +21,15 @@ bool comp_pagerank(const int32_t P_ID,
         const int32_t VertexNum,
         const T* VertexData,
         const int32_t* _VertexOut,
-        const int32_t* _VertexIn) {
+        const int32_t* _VertexIn,
+        std::vector<bool>& ActiveVector) {
     omp_set_dynamic(0);
     omp_set_num_threads(OMPNUM);
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
     cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
+
     int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
     int32_t start_id = EdgeData[3];
     int32_t end_id = EdgeData[4];
@@ -34,17 +40,17 @@ bool comp_pagerank(const int32_t P_ID,
     int32_t vertex_num = VertexNum;
     std::vector<T> result(end_id-start_id+5, 0);
     result[end_id-start_id+4] = P_ID;
-    result[end_id-start_id+3] = std::floor(start_id*1.0/10000);
-    result[end_id-start_id+2] = start_id%10000;
-    result[end_id-start_id+1] = std::floor(end_id*1.0/10000);
-    result[end_id-start_id+0] = end_id%10000;
+    result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
+    result[end_id-start_id+2] = (int32_t)start_id%10000;
+    result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
+    result[end_id-start_id+0] = (int32_t)end_id%10000;
 
     // LOG(INFO) << end_id << " " << start_id;
 
     int32_t i   = 0;
     int32_t k   = 0;
     int32_t tmp = 0;
-    float   rel = 0;
+    T   rel = 0;
     #pragma omp parallel for private(k, tmp, rel) schedule(dynamic)
     for (i=0; i < end_id-start_id; i++) {
       rel = 0;
@@ -69,13 +75,15 @@ bool comp_sssp(const int32_t P_ID,
         const int32_t VertexNum,
         const T* VertexData,
         const int32_t* _VertexOut,
-        const int32_t* _VertexIn) {
+        const int32_t* _VertexIn,
+        std::vector<bool>& ActiveVector) {
     omp_set_dynamic(0);
     omp_set_num_threads(OMPNUM);
     DataPath += std::to_string(P_ID);
     DataPath += ".edge.npy";
     // LOG(INFO) << "Processing " << DataPath;
     cnpy::NpyArray EdgeDataNpy = load_edge(DataPath);
+
     int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy.data);
     int32_t start_id = EdgeData[3];
     int32_t end_id = EdgeData[4];
@@ -86,25 +94,25 @@ bool comp_sssp(const int32_t P_ID,
     int32_t vertex_num = VertexNum;
     std::vector<T> result(end_id-start_id+5, 0);
     result[end_id-start_id+4] = P_ID;
-    result[end_id-start_id+3] = std::floor(start_id*1.0/10000);
-    result[end_id-start_id+2] = start_id%10000;
-    result[end_id-start_id+1] = std::floor(end_id*1.0/10000);
-    result[end_id-start_id+0] = end_id%10000;
+    result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
+    result[end_id-start_id+2] = (int32_t)start_id%10000;
+    result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
+    result[end_id-start_id+0] = (int32_t)end_id%10000;
 
     // LOG(INFO) << end_id << " " << start_id;
     int32_t i   = 0;
     int32_t j   = 0;
-    int32_t   min = 0;
+    T   min = 0;
     omp_set_dynamic(0);
     omp_set_num_threads(OMPNUM);
     #pragma omp parallel for private(j, min) schedule(dynamic)
-        for (i = 0; i < end_id-start_id; i++) {
-            min = VertexData[start_id+i];
-            for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
-                if (min > VertexData[indices[indptr[i]+j]] + 1)
-                    min = VertexData[indices[indptr[i] + j]] + 1;
+    for (i = 0; i < end_id-start_id; i++) {
+        min = VertexData[start_id+i];
+        for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
+            if (ActiveVector[indices[indptr[i]+j]] && min > VertexData[indices[indptr[i]+j]] + 1)
+                min = VertexData[indices[indptr[i] + j]] + 1;
             }
-        value[i] = min - VertexData[start_id+i];
+        result[i] = min - VertexData[start_id+i];
     }
     EdgeDataNpy.destruct();
     char *c_result = reinterpret_cast<char*>(&result[0]);
@@ -119,7 +127,8 @@ bool comp_cc(const int32_t P_ID,
         const int32_t VertexNum,
         const T* VertexData,
         const int32_t* _VertexOut,
-        const int32_t* _VertexIn) {
+        const int32_t* _VertexIn,
+        std::vector<bool>& ActiveVector) {
     omp_set_dynamic(0);
     omp_set_num_threads(OMPNUM);
     DataPath += std::to_string(P_ID);
@@ -136,25 +145,26 @@ bool comp_cc(const int32_t P_ID,
     int32_t vertex_num = VertexNum;
     std::vector<T> result(end_id-start_id+5, 0);
     result[end_id-start_id+4] = P_ID;
-    result[end_id-start_id+3] = std::floor(start_id*1.0/10000);
-    result[end_id-start_id+2] = start_id%10000;
-    result[end_id-start_id+1] = std::floor(end_id*1.0/10000);
-    result[end_id-start_id+0] = end_id%10000;
+    result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
+    result[end_id-start_id+2] = (int32_t)start_id%10000;
+    result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
+    result[end_id-start_id+0] = (int32_t)end_id%10000;
 
     // LOG(INFO) << end_id << " " << start_id;
     int32_t i   = 0;
     int32_t j   = 0;
-    int32_t   max = 0;
+    T   max = 0;
     omp_set_dynamic(0);
     omp_set_num_threads(OMPNUM);
     #pragma omp parallel for private(j, max) schedule(dynamic)
-        for (i = 0; i < end_id-start_id; i++) {
-            max = VertexData[start_id+i];
-            for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
-                if (max < VertexData[indices[indptr[i]+j]])
-                    max = VertexData[indices[indptr[i] + j]];
-            }
-        value[i] = max - VertexData[start_id+i];
+    for (i = 0; i < end_id-start_id; i++) {
+        max = VertexData[start_id+i];
+        for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
+            //if (ActiveVector[indices[indptr[i]+j]] && max < VertexData[indices[indptr[i]+j]])
+            if (max < VertexData[indices[indptr[i]+j]])
+                max = VertexData[indices[indptr[i] + j]];
+        }
+        result[i] = max - VertexData[start_id+i];
     }
     EdgeDataNpy.destruct();
     char *c_result = reinterpret_cast<char*>(&result[0]);
@@ -170,7 +180,8 @@ public:
             const int32_t,
             const T*,
             const int32_t*,
-            const int32_t*) = NULL;
+            const int32_t*,
+            std::vector<bool>&) = NULL;
     T _FilterThreshold;
     std::string _DataPath;
     std::string _Scheduler;
@@ -181,7 +192,6 @@ public:
     int32_t _PartitionID_Start;
     int32_t _PartitionID_End;
     std::map<int, std::string> _AllHosts;
-    std::map<int32_t, cnpy::NpyArray> _EdgeCache;
     std::vector<int32_t> _VertexOut;
     std::vector<int32_t> _VertexIn;
     std::vector<T> _VertexData;
@@ -269,7 +279,7 @@ void GraphPS<T>::run() {
     if (_my_rank==0)
         LOG(INFO) << "Init Time: " << INIT_TIME << " ms";
 
-    LOG(INFO) << "Rank " << _my_rank << "use " << _ThreadNum << " comp threads";
+    LOG(INFO) << "Rank " << _my_rank << " use " << _ThreadNum << " comp threads";
     std::vector<std::future<bool>> comp_pool;
     int32_t step = 0;
     for (step = 0; step < _MaxIteration; step++) {
@@ -288,23 +298,23 @@ void GraphPS<T>::run() {
                                       _VertexNum,
                                       _VertexData.data(),
                                       _VertexOut.data(),
-                                      _VertexIn.data()));
+                                      _VertexIn.data(),
+                                      std::ref(_UpdatedLastIter)));
         }
         barrier_threadpool(comp_pool ,0);
         barrier_workers();
 
-        #pragma omp parallel for schedule(static)
+        int32_t changed_num = 0;
+        omp_set_num_threads(_ThreadNum*OMPNUM);
+        #pragma omp parallel for reduction (+:changed_num)  schedule(static)
         for (int32_t result_id = 0; result_id < _VertexNum; result_id++) {
             _VertexData[result_id] += _VertexDataNew[result_id];
             if (_VertexDataNew[result_id] == 0) {
                 _UpdatedLastIter[result_id] = false;
             } else {
                 _UpdatedLastIter[result_id] = true;
+		changed_num += 1;
             }
-        }
-        int32_t changed_num = 0;
-        for (auto t_it = _UpdatedLastIter.begin(); t_it != _UpdatedLastIter.end(); t_it++) {
-            changed_num += *t_it;
         }
         stop_time_comp();
         if (_my_rank==0)

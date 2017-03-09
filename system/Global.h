@@ -31,7 +31,7 @@
 #define ZMQ_PREFIX "tcp://*:"
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
-#define OMPNUM 2
+#define OMPNUM 3
 #define GPS_INF 10000
 //typedef int32_t VertexType;
 //typedef int32_t PartitionIDType;
@@ -47,8 +47,11 @@ std::chrono::steady_clock::time_point INIT_TIME_START;
 std::chrono::steady_clock::time_point INIT_TIME_END;
 std::chrono::steady_clock::time_point COMP_TIME_START;
 std::chrono::steady_clock::time_point COMP_TIME_END;
+std::chrono::steady_clock::time_point APP_TIME_START;
+std::chrono::steady_clock::time_point APP_TIME_END;
 int64_t INIT_TIME;
 int64_t COMP_TIME;
+int64_t APP_TIME;
 
 cnpy::NpyArray load_edge(std::string & DataPath) {;
     cnpy::NpyArray npz = cnpy::npy_load(DataPath);
@@ -76,6 +79,16 @@ void finalize_workers()
 void barrier_workers()
 {
     MPI_Barrier(MPI_COMM_WORLD);
+}
+
+void start_time_app() {
+    APP_TIME_START = std::chrono::steady_clock::now();
+}
+
+void stop_time_app() {
+    APP_TIME_END = std::chrono::steady_clock::now();
+    APP_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
+        (APP_TIME_END-APP_TIME_START).count();
 }
 
 void start_time_init() {
@@ -132,7 +145,7 @@ void barrier_threadpool(std::vector<std::future<bool>> & comp_pool, int32_t thre
            }
        }
        if (comp_pool.size() > threshold) {
-           graphps_sleep(50);
+           graphps_sleep(10);
            continue;
        }
        else
