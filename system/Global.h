@@ -22,7 +22,7 @@
 #include <glog/logging.h>
 #include <zmq.h>
 #include <snappy.h>
-//#include <omp.h>
+#include <omp.h>
 #include <sched.h>
 #include "cnpy.h"
 

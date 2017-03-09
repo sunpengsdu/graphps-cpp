@@ -30,7 +30,8 @@ int main(int argc, char *argv[]) {
     init_workers();
     PagerankPS<double> pg;
     // Data Path, VertexNum number, Partition number, thread number, Max Iteration
-    pg.init("/Users/sunshine/Desktop/", 100, 10, 4, 5);
+    //pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 10, 10);
+    pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294, 11, 20);
     pg.run();
     finalize_workers();
     return 0;
