@@ -25,7 +25,9 @@
 #include <chrono>
 #include <future>
 #include <atomic>
+#include <algorithm>
 #include "cnpy.h"
+#include "bloom_filter.hpp"
 
 #define MASTER_RANK 0
 #define HOST_LEN 20
@@ -34,7 +36,9 @@
 #define ZMQ_BUFFER 20*1024*1024
 #define OMPNUM 2
 #define GPS_INF 10000
-#define EDGE_CACHE_SIZE 10*1024 //MB
+#define EDGE_CACHE_SIZE 80*1024 //MB
+#define BF_SIZE 10
+#define BF_RATE 0.1
 //typedef int32_t VertexType;
 //typedef int32_t PartitionIDType;
 #define SNAPPY_COMPRESS
@@ -46,139 +50,135 @@ char _hostname[HOST_LEN];
 char *_all_hostname;
 void *_zmq_context;
 int ZMQNUM;
-
 std::chrono::steady_clock::time_point INIT_TIME_START;
 std::chrono::steady_clock::time_point INIT_TIME_END;
 std::chrono::steady_clock::time_point COMP_TIME_START;
 std::chrono::steady_clock::time_point COMP_TIME_END;
 std::chrono::steady_clock::time_point APP_TIME_START;
 std::chrono::steady_clock::time_point APP_TIME_END;
-
 int64_t INIT_TIME;
 int64_t COMP_TIME;
 int64_t APP_TIME;
-
-std::unordered_map<int32_t, char*> _EdgeCache;
+std::unordered_map<int32_t, char *> _EdgeCache;
 std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
+ 
 
-
-char* load_edge(int32_t p_id, std::string & DataPath) {
-    if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
-        return _EdgeCache[p_id];
-    } 
-    cnpy::NpyArray npz = cnpy::npy_load(DataPath);
-    int32_t npz_size = std::ceil(sizeof(int32_t)*npz.shape[0]*1.0/1024/1024);
-    if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
-        _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
-        _EdgeCache[p_id] = npz.data;
-    }
-    return npz.data;
+char *load_edge(int32_t p_id, std::string &DataPath) {
+  if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
+    return _EdgeCache[p_id];
+  }
+  cnpy::NpyArray npz = cnpy::npy_load(DataPath);
+  int32_t npz_size = std::ceil(sizeof(int32_t)*npz.shape[0]*1.0/1024/1024);
+  std::srand(std::time(0));
+  if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
+    _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
+    _EdgeCache[p_id] = npz.data;
+  }
+  return npz.data;
 }
 
-void clean_edge(int32_t p_id, char* data) {
-    if (_EdgeCache.find(p_id) == _EdgeCache.end())
-        delete [] (data);
+void clean_edge(int32_t p_id, char *data) {
+  if (_EdgeCache.find(p_id) == _EdgeCache.end()) {
+    delete [] (data);
+  }
 }
 
-inline int get_worker_id()
-{
-    return _my_rank;
+inline int get_worker_id() {
+  return _my_rank;
 }
-inline int get_worker_num()
-{
-    return _num_workers;
+inline int get_worker_num() {
+  return _num_workers;
 }
 
-void finalize_workers()
-{
-    LOG(INFO) << "Finalizing the application";
-    delete [] (_all_hostname);
-    zmq_ctx_destroy (_zmq_context);
-    for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
-      delete [] t_it->second;
-    }
-    MPI_Finalize();
+void finalize_workers() {
+  LOG(INFO) << "Finalizing the application";
+  delete [] (_all_hostname);
+  zmq_ctx_destroy (_zmq_context);
+  for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
+    delete [] t_it->second;
+  }
+  MPI_Finalize();
 }
 
-void barrier_workers()
-{
-    MPI_Barrier(MPI_COMM_WORLD);
+void barrier_workers() {
+  MPI_Barrier(MPI_COMM_WORLD);
 }
 
 void start_time_app() {
-    APP_TIME_START = std::chrono::steady_clock::now();
+  APP_TIME_START = std::chrono::steady_clock::now();
 }
 
 void stop_time_app() {
-    APP_TIME_END = std::chrono::steady_clock::now();
-    APP_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
-        (APP_TIME_END-APP_TIME_START).count();
+  APP_TIME_END = std::chrono::steady_clock::now();
+  APP_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
+             (APP_TIME_END-APP_TIME_START).count();
 }
 
 void start_time_init() {
-    INIT_TIME_START = std::chrono::steady_clock::now();
+  INIT_TIME_START = std::chrono::steady_clock::now();
 }
 
 void stop_time_init() {
-    INIT_TIME_END = std::chrono::steady_clock::now();
-    INIT_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
-        (INIT_TIME_END-INIT_TIME_START).count();
+  INIT_TIME_END = std::chrono::steady_clock::now();
+  INIT_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
+              (INIT_TIME_END-INIT_TIME_START).count();
 }
 
 void start_time_comp() {
-    COMP_TIME_START = std::chrono::steady_clock::now();
+  COMP_TIME_START = std::chrono::steady_clock::now();
 }
 
 void stop_time_comp() {
-    COMP_TIME_END = std::chrono::steady_clock::now();
-    COMP_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
-        (COMP_TIME_END-COMP_TIME_START).count();
+  COMP_TIME_END = std::chrono::steady_clock::now();
+  COMP_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
+              (COMP_TIME_END-COMP_TIME_START).count();
 }
 
-void init_workers()
-{
-    MPI_Init(NULL, NULL);
-    MPI_Comm_size(MPI_COMM_WORLD, &_num_workers);
-    MPI_Comm_rank(MPI_COMM_WORLD, &_my_rank);
-    MPI_Get_processor_name(_hostname, &_hostname_len);
-    _all_hostname = new char[HOST_LEN * _num_workers];
-    memset(_all_hostname, 0, HOST_LEN * _num_workers);
-    MPI_Allgather(_hostname, HOST_LEN, MPI_CHAR, _all_hostname, HOST_LEN, MPI_CHAR, MPI_COMM_WORLD);
-    if (_my_rank == 0) {
-        LOG(INFO) << "Processors: " << _num_workers;
-        for (int i = 0; i < _num_workers; i++)
-            LOG(INFO) << "Rank " << i << ": " << _all_hostname + HOST_LEN*i;
+void init_workers() {
+  MPI_Init(NULL, NULL);
+  MPI_Comm_size(MPI_COMM_WORLD, &_num_workers);
+  MPI_Comm_rank(MPI_COMM_WORLD, &_my_rank);
+  MPI_Get_processor_name(_hostname, &_hostname_len);
+  _all_hostname = new char[HOST_LEN * _num_workers];
+  memset(_all_hostname, 0, HOST_LEN * _num_workers);
+  MPI_Allgather(_hostname, HOST_LEN, MPI_CHAR, _all_hostname, HOST_LEN, MPI_CHAR, MPI_COMM_WORLD);
+  if (_my_rank == 0) {
+    LOG(INFO) << "Processors: " << _num_workers;
+    for (int i = 0; i < _num_workers; i++) {
+      LOG(INFO) << "Rank " << i << ": " << _all_hostname + HOST_LEN *i;
     }
-    _zmq_context = zmq_ctx_new ();
-    _EdgeCache_Size = 0;
-    _Computing_Num = 0;
-    ZMQNUM = (int32_t)_num_workers*1.2;
-    barrier_workers();
+  }
+  _zmq_context = zmq_ctx_new ();
+  _EdgeCache_Size = 0;
+  _Computing_Num = 0;
+  ZMQNUM = (int32_t)_num_workers*1.5;
+  if (ZMQNUM < 3)
+      ZMQNUM = 3;
+  barrier_workers();
 }
 
 void graphps_sleep(uint32_t ms) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
-void barrier_threadpool(std::vector<std::future<bool>> & comp_pool, int32_t threshold) {
-    while (1) {
-       for(auto it = comp_pool.begin(); it!=comp_pool.end();) {
-           auto status = it->wait_for(std::chrono::milliseconds(0));
-           if (status == std::future_status::ready) {
-               it = comp_pool.erase(it);
-           }
-           else {
-               it++;
-           }
-       }
-       if (comp_pool.size() > threshold) {
-           graphps_sleep(10);
-           continue;
-       }
-       else
-           break;
+void barrier_threadpool(std::vector<std::future<bool>> &comp_pool, int32_t threshold) {
+  while (1) {
+    for (auto it = comp_pool.begin(); it!=comp_pool.end();) {
+      auto status = it->wait_for(std::chrono::milliseconds(0));
+      if (status == std::future_status::ready) {
+        it = comp_pool.erase(it);
+      } else {
+        it++;
+      }
     }
+    if (comp_pool.size() > threshold) {
+      graphps_sleep(10);
+      continue;
+    } else {
+      break;
+    }
+  }
 }
 
 #endif /* SYSTEM_GLOBAL_H_ */
