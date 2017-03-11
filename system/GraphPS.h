@@ -285,7 +285,6 @@ void GraphPS<T>::init(std::string DataPath,
   _Scheduler = _AllHosts[0];
   _UpdatedLastIter.assign(_VertexNum, true);
   _VertexDataNew.assign(_VertexNum, 0);
-  init_vertex();
   int32_t n = std::ceil(_PartitionNum*1.0/_num_workers);
   _PartitionID_Start = (_my_rank*n < _PartitionNum) ? _my_rank*n:-1;
   _PartitionID_End = ((1+_my_rank)*n > _PartitionNum) ? _PartitionNum:(1+_my_rank)*n;
@@ -323,19 +322,44 @@ void  GraphPS<T>::load_vertex_out() {
 
 template<class T>
 void GraphPS<T>::run() {
+  /////////////////
+  start_time_hdfs();
+  int hdfs_re = 0;
+  hdfs_re = system("rm /home/mapred/tmp/satgraph/*");
+  std::string hdfs_bin = "/opt/hadoop-1.2.1/bin/hadoop fs -get ";
+  std::string hdfs_dst = " /home/mapred/tmp/satgraph/";
+  #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+  for (int32_t k=_PartitionID_Start; k<_PartitionID_End; k++) {
+    std::string hdfs_command;
+    hdfs_command.clear();
+    hdfs_command = hdfs_bin + _DataPath;
+    hdfs_command += std::to_string(k);
+    hdfs_command += ".edge.npy ";
+    hdfs_command += hdfs_dst;
+    hdfs_re = system(hdfs_command.c_str());
+    //LOG(INFO) << hdfs_command;
+  }
+  stop_time_hdfs();
+  barrier_workers();
+  if (_my_rank==0)
+    LOG(INFO) << "HDFS  Load Time: " << HDFS_TIME << " ms";
+  ////////////////
+
+  init_vertex();
   std::vector<std::thread> zmq_server_pool;
   for (int32_t i=0; i<ZMQNUM; i++)
     zmq_server_pool.push_back(std::thread(graphps_server<T>, std::ref(_VertexDataNew), i));
   barrier_workers();
   stop_time_init();
-  if (_my_rank==0)
+
+ if (_my_rank==0)
     LOG(INFO) << "Init Time: " << INIT_TIME << " ms";
   LOG(INFO) << "Rank " << _my_rank << " use " << _ThreadNum << " comp threads";
   std::vector<std::future<bool>> comp_pool;
   std::vector<int32_t> ActiveVector_V;
   float updated_ratio = 1.0;
 
-  int32_t step = 0;
+   int32_t step = 0;
   for (step = 0; step < _MaxIteration; step++) {
     SKIPPED_PARTITIONS = 0;
     if (_my_rank==0) {
@@ -349,6 +373,7 @@ void GraphPS<T>::run() {
     for (int32_t k = _PartitionID_Start; k < _PartitionID_End; k++) {
       Partitions.push_back(k);
     }
+
     std::random_shuffle(Partitions.begin(), Partitions.end());
     for (int32_t &P_ID : Partitions) {
       barrier_threadpool(comp_pool, _ThreadNum*2);
@@ -389,8 +414,7 @@ void GraphPS<T>::run() {
       LOG(INFO) << "Iteration: " << step
                 << ", uses "<< COMP_TIME
                 << " ms, Update " << changed_num 
-                << ", Ratio " << updated_ratio 
-                << ", Skip " << SKIPPED_PARTITIONS;
+                << ", Ratio " << updated_ratio;
   if (changed_num == 0) {break;}
   }
   graphps_send("!", 1, _my_rank);

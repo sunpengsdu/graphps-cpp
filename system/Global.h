@@ -56,9 +56,12 @@ std::chrono::steady_clock::time_point COMP_TIME_START;
 std::chrono::steady_clock::time_point COMP_TIME_END;
 std::chrono::steady_clock::time_point APP_TIME_START;
 std::chrono::steady_clock::time_point APP_TIME_END;
+std::chrono::steady_clock::time_point HDFS_TIME_START;
+std::chrono::steady_clock::time_point HDFS_TIME_END;
 int64_t INIT_TIME;
 int64_t COMP_TIME;
 int64_t APP_TIME;
+int64_t HDFS_TIME;
 std::unordered_map<int32_t, char *> _EdgeCache;
 std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
@@ -113,6 +116,16 @@ void stop_time_app() {
   APP_TIME_END = std::chrono::steady_clock::now();
   APP_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
              (APP_TIME_END-APP_TIME_START).count();
+}
+
+void start_time_hdfs() {
+  HDFS_TIME_START = std::chrono::steady_clock::now();
+}
+
+void stop_time_hdfs() {
+  HDFS_TIME_END = std::chrono::steady_clock::now();
+  HDFS_TIME = std::chrono::duration_cast<std::chrono::milliseconds>
+             (HDFS_TIME_END-HDFS_TIME_START).count();
 }
 
 void start_time_init() {
