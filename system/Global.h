@@ -97,6 +97,10 @@ inline int get_worker_num() {
   return _num_workers;
 }
 
+void barrier_workers() {
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
 void finalize_workers() {
   LOG(INFO) << "Finalizing the application";
   delete [] (_all_hostname);
@@ -104,11 +108,8 @@ void finalize_workers() {
   for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
     delete [] t_it->second;
   }
+  barrier_workers();
   MPI_Finalize();
-}
-
-void barrier_workers() {
-  MPI_Barrier(MPI_COMM_WORLD);
 }
 
 void start_time_app() {
