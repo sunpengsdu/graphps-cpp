@@ -54,7 +54,7 @@ bool comp_pagerank(const int32_t P_ID,
   int32_t * indptr = EdgeData + 5 + indices_len;
   int32_t vertex_num = VertexNum;
   std::vector<T> result(end_id-start_id+5, 0);
-  result[end_id-start_id+4] = P_ID;
+  result[end_id-start_id+4] = 0; //sparsity ratio
   result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
   result[end_id-start_id+2] = (int32_t)start_id%10000;
   result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
@@ -64,21 +64,27 @@ bool comp_pagerank(const int32_t P_ID,
   int32_t k   = 0;
   int32_t tmp = 0;
   T   rel = 0;
-  #pragma omp parallel for num_threads(OMPNUM) private(k, tmp, rel) schedule(dynamic, 1000)
+  int32_t changed_num = 0;
+  #pragma omp parallel for num_threads(OMPNUM) private(k, tmp, rel) reduction (+:changed_num) schedule(dynamic, 1000)
   for (i=0; i < end_id-start_id; i++) {
     rel = 0;
     for (k = 0; k < indptr[i+1] - indptr[i]; k++) {
       tmp = indices[indptr[i] + k];
       rel += VertexData[tmp]/_VertexOut[tmp];
     }
-    result[i] = (rel*0.85 + 1.0/vertex_num) - VertexData[start_id+i];
-    // if (std::abs(result[i] < 0.00000001))
-    //    result[i] = 0;
+    rel = rel*0.85 + 1.0/vertex_num;
+    if (rel != VertexData[start_id+i]) {
+      result[i] = rel - VertexData[start_id+i];
+      changed_num++;
+    }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  char *c_result = reinterpret_cast<char*>(&result[0]);
+  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
+  // char *c_result = reinterpret_cast<char*>(&result[0]);
   _Computing_Num--;
-  graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+  if (changed_num > 0)
+    // graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+    graphps_sendall<T>(std::ref(result));
   return true;
 }
 
@@ -128,7 +134,7 @@ bool comp_sssp(const int32_t P_ID,
   int32_t * indptr = EdgeData + 5 + indices_len;
   int32_t vertex_num = VertexNum;
   std::vector<T> result(end_id-start_id+5, 0);
-  result[end_id-start_id+4] = P_ID;
+  result[end_id-start_id+4] = 0;
   result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
   result[end_id-start_id+2] = (int32_t)start_id%10000;
   result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
@@ -142,19 +148,27 @@ bool comp_sssp(const int32_t P_ID,
   int32_t i   = 0;
   int32_t j   = 0;
   T   min = 0;
-  #pragma omp parallel for num_threads(OMPNUM) private(j, min) schedule(dynamic, 1000)
+  int32_t changed_num = 0;
+  #pragma omp parallel for num_threads(OMPNUM) private(j, min) reduction (+:changed_num) schedule(dynamic, 1000)
   for (i = 0; i < end_id-start_id; i++) {
     min = VertexData[start_id+i];
     for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
       if (ActiveVector[indices[indptr[i]+j]] && min > VertexData[indices[indptr[i]+j]] + 1)
         min = VertexData[indices[indptr[i] + j]] + 1;
     }
-    result[i] = min - VertexData[start_id+i];
+    if (min != VertexData[start_id+i]) {
+      result[i] = min - VertexData[start_id+i];
+      changed_num++;
+    }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  char *c_result = reinterpret_cast<char*>(&result[0]);
+  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
+  // char *c_result = reinterpret_cast<char*>(&result[0]);
   _Computing_Num--;
-  graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+  if (changed_num > 0) {
+    // graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+    graphps_sendall<T>(std::ref(result));
+  }
   return true;
 }
 
@@ -184,7 +198,7 @@ bool comp_cc(const int32_t P_ID,
   int32_t * indptr = EdgeData + 5 + indices_len;
   int32_t vertex_num = VertexNum;
   std::vector<T> result(end_id-start_id+5, 0);
-  result[end_id-start_id+4] = P_ID;
+  result[end_id-start_id+4] = 0;
   result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
   result[end_id-start_id+2] = (int32_t)start_id%10000;
   result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
@@ -193,7 +207,8 @@ bool comp_cc(const int32_t P_ID,
   int32_t i   = 0;
   int32_t j   = 0;
   T   max = 0;
-  #pragma omp parallel for num_threads(OMPNUM) private(j, max) schedule(dynamic, 1000)
+  int32_t changed_num = 0;
+  #pragma omp parallel for num_threads(OMPNUM) private(j, max)  reduction (+:changed_num) schedule(dynamic, 1000)
   for (i = 0; i < end_id-start_id; i++) {
     max = VertexData[start_id+i];
     for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
@@ -201,12 +216,18 @@ bool comp_cc(const int32_t P_ID,
       if (max < VertexData[indices[indptr[i]+j]])
         max = VertexData[indices[indptr[i] + j]];
     }
-    result[i] = max - VertexData[start_id+i];
+    if (max != VertexData[start_id+i]) {
+      result[i] = max - VertexData[start_id+i];
+      changed_num++;
+    }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  char *c_result = reinterpret_cast<char*>(&result[0]);
+  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
+  // char *c_result = reinterpret_cast<char*>(&result[0]);
   _Computing_Num--;
-  graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+  if (changed_num > 0)
+    // graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
+    graphps_sendall<T>(std::ref(result));
   return true;
 }
 
@@ -323,15 +344,16 @@ void  GraphPS<T>::load_vertex_out() {
 template<class T>
 void GraphPS<T>::run() {
   /////////////////
+  #ifdef USE_HDFS
+  LOG(INFO) << "Rank " << _my_rank << " Loading Edge From HDFS";
   start_time_hdfs();
   int hdfs_re = 0;
   hdfs_re = system("rm /home/mapred/tmp/satgraph/*");
   std::string hdfs_bin = "/opt/hadoop-1.2.1/bin/hadoop fs -get ";
-  std::string hdfs_dst = " /home/mapred/tmp/satgraph/";
+  std::string hdfs_dst = "/home/mapred/tmp/satgraph/";
   #pragma omp parallel for num_threads(OMPNUM) schedule(static)
   for (int32_t k=_PartitionID_Start; k<_PartitionID_End; k++) {
     std::string hdfs_command;
-    hdfs_command.clear();
     hdfs_command = hdfs_bin + _DataPath;
     hdfs_command += std::to_string(k);
     hdfs_command += ".edge.npy ";
@@ -339,16 +361,31 @@ void GraphPS<T>::run() {
     hdfs_re = system(hdfs_command.c_str());
     //LOG(INFO) << hdfs_command;
   }
+
+  LOG(INFO) << "Rank " << _my_rank << " Loading Vertex From HDFS";
+  std::string hdfs_command;
+  hdfs_command = hdfs_bin + _DataPath;
+  hdfs_command += "vertexin.npy ";
+  hdfs_command += hdfs_dst;
+  hdfs_re = system(hdfs_command.c_str());
+  hdfs_command.clear();
+  hdfs_command = hdfs_bin + _DataPath;
+  hdfs_command += "vertexout.npy ";
+  hdfs_command += hdfs_dst;
+  hdfs_re = system(hdfs_command.c_str());
   stop_time_hdfs();
   barrier_workers();
   if (_my_rank==0)
     LOG(INFO) << "HDFS  Load Time: " << HDFS_TIME << " ms";
+  _DataPath.clear();
+  _DataPath = hdfs_dst;
+  #endif
   ////////////////
 
   init_vertex();
   std::vector<std::thread> zmq_server_pool;
   for (int32_t i=0; i<ZMQNUM; i++)
-    zmq_server_pool.push_back(std::thread(graphps_server<T>, std::ref(_VertexDataNew), i));
+    zmq_server_pool.push_back(std::thread(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData), i));
   barrier_workers();
   stop_time_init();
 
@@ -366,7 +403,11 @@ void GraphPS<T>::run() {
       LOG(INFO) << "Start Iteration: " << step;
     }
     start_time_comp();
+#ifdef USE_ASYNC
+    memcpy(_VertexDataNew.data(), _VertexData.data(), sizeof(T)*_VertexNum);
+#else
     memset(_VertexDataNew.data(), 0, sizeof(T)*_VertexNum);
+#endif
     std::vector<int32_t> Partitions;
     updated_ratio = 1.0;
 
@@ -399,6 +440,15 @@ void GraphPS<T>::run() {
     ActiveVector_V.clear();
     #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) reduction (+:changed_num)  schedule(static)
     for (int32_t result_id = 0; result_id < _VertexNum; result_id++) {
+#ifdef USE_ASYNC
+      if (_VertexDataNew[result_id] == _VertexData[result_id]) {
+        _UpdatedLastIter[result_id] = false;
+      } else {
+        _UpdatedLastIter[result_id] = true;
+        changed_num += 1;
+      //  ActiveVector_V.push_back(result_id);
+      }
+#else
       _VertexData[result_id] += _VertexDataNew[result_id];
       if (_VertexDataNew[result_id] == 0) {
         _UpdatedLastIter[result_id] = false;
@@ -407,6 +457,7 @@ void GraphPS<T>::run() {
         changed_num += 1;
       //  ActiveVector_V.push_back(result_id);
       }
+#endif
     }
     stop_time_comp();
     updated_ratio = changed_num * 1.0 / _VertexNum;

@@ -37,11 +37,14 @@
 #define OMPNUM 2
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 80*1024 //MB
+#define DENSITY_VALUE 10
 #define BF_SIZE 10
 #define BF_RATE 0.1
 //typedef int32_t VertexType;
 //typedef int32_t PartitionIDType;
-#define SNAPPY_COMPRESS
+#define USE_SNAPPY
+//#define USE_HDFS
+//#define USE_ASYNC
 
 int  _my_rank;
 int  _num_workers;

@@ -27,7 +27,7 @@ void zmq_send(const char * data, const int length, const int rank, const int id)
 
 //to do design the port
 void graphps_send(std::string &data, const int length, const int rank) {
-#ifdef SNAPPY_COMPRESS
+#ifdef USE_SNAPPY
   std::string compressed_data;
   int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
   if (length==1 && data[0] =='!') {
@@ -49,7 +49,7 @@ void graphps_send(std::string &data, const int length, const int rank) {
 }
 
 void graphps_send(const char * data, const int length, const int rank) {
-#ifdef SNAPPY_COMPRESS
+#ifdef USE_SNAPPY
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
   if (length==1 && *data == '!') {
@@ -70,24 +70,32 @@ void graphps_send(const char * data, const int length, const int rank) {
 #endif
 }
 
-void graphps_sendall(std::string &data, const int length) {
+template<class T>
+void graphps_sendall(std::vector<T> & data_vector) {
+  int32_t length = 0;
+  int32_t density = data_vector.back();
+  char* data = NULL;
+  std::vector<T> sparsedata_vector;
+  if (density < DENSITY_VALUE) {
+    for (int32_t k=0; k<data_vector.size()-5; k++) {
+      if (data_vector[k] != 0) {
+        sparsedata_vector.push_back(k);
+        sparsedata_vector.push_back(data_vector[k]);
+      }
+    }
+    sparsedata_vector.push_back(data_vector[data_vector.size()-5]);
+    sparsedata_vector.push_back(data_vector[data_vector.size()-4]);
+    sparsedata_vector.push_back(data_vector[data_vector.size()-3]);
+    sparsedata_vector.push_back(data_vector[data_vector.size()-2]);
+    sparsedata_vector.push_back(data_vector[data_vector.size()-1]);
+    data = reinterpret_cast<char*>(&sparsedata_vector[0]);
+    length = sizeof(T)*sparsedata_vector.size();
+  } else {
+    data = reinterpret_cast<char*>(&data_vector[0]);
+    length = sizeof(T)*data_vector.size();
+  }
   std::srand(std::time(0));
-#ifdef SNAPPY_COMPRESS
-  std::string compressed_data;
-  int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
-  //#pragma omp parallel for num_threads(OMPNUM) schedule(static)
-  for (int rank = 0; rank < _num_workers; rank++)
-    zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
-#else
-  //#pragma omp parallel for num_threads(OMPNUM) schedule(static)
-  for (int rank = 0; rank < _num_workers; rank++)
-    zmq_send(data.c_str(), length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
-#endif
-}
-
-void graphps_sendall(const char * data, const int length) {
-  std::srand(std::time(0));
-#ifdef SNAPPY_COMPRESS
+#ifdef USE_SNAPPY
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
   //#pragma omp parallel for num_threads(OMPNUM) schedule(static)
@@ -102,7 +110,7 @@ void graphps_sendall(const char * data, const int length) {
 
 
 template<class T>
-void graphps_server(std::vector<T>& VertexDataNew, int32_t id) {
+void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, int32_t id) {
   //  Socket to talk to clients
   std::string server_addr(ZMQ_PREFIX);
   // server_addr += std::to_string(ZMQ_PORT+_my_rank);
@@ -116,7 +124,7 @@ void graphps_server(std::vector<T>& VertexDataNew, int32_t id) {
     memset(buffer, 0, ZMQ_BUFFER);
     int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
     std::string uncompressed;
-#ifdef SNAPPY_COMPRESS
+#ifdef USE_SNAPPY
     assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
 #else
     uncompressed.assign(buffer, length);
@@ -128,16 +136,34 @@ void graphps_server(std::vector<T>& VertexDataNew, int32_t id) {
       break;
     } else {
       T* raw_data = (T*) uncompressed.c_str();
-#ifdef SNAPPY_COMPRESS
+#ifdef USE_SNAPPY
       int32_t raw_data_len = (uncompressed.size()) / sizeof(T);
 #else
       int32_t raw_data_len = length / sizeof(T);
 #endif
-      int32_t partition_id = raw_data[raw_data_len-1];
+      int32_t density = raw_data[raw_data_len-1];
       int32_t start_id = (int32_t)raw_data[raw_data_len-2]*10000 + (int32_t)raw_data[raw_data_len-3];
       int32_t end_id = (int32_t)raw_data[raw_data_len-4]*10000 + (int32_t)raw_data[raw_data_len-5];
-      assert(end_id-start_id == raw_data_len-5);
-      memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
+      if (density >= DENSITY_VALUE) {
+        assert(end_id-start_id == raw_data_len-5);
+#ifdef USE_ASYNC
+        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+        for (int32_t k=0; k<(end_id-start_id); k++) {
+          VertexData[k+start_id] += raw_data[k];
+        }
+#else
+        memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
+#endif
+      } else {
+        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+        for (int32_t k=0; k<(raw_data_len-5); k=k+2) {
+#ifdef USE_ASYNC
+          VertexData[raw_data[k]+start_id] += raw_data[k+1];
+#else
+          VertexDataNew[raw_data[k]+start_id] = raw_data[k+1];
+#endif
+        }
+      }
       zmq_send (responder, "ACK", 3, 0);
     }
   }
