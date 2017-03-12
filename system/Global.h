@@ -27,7 +27,7 @@
 #include <atomic>
 #include <algorithm>
 #include "cnpy.h"
-#include "bloom_filter.hpp"
+// #include "bloom_filter.hpp"
 
 #define MASTER_RANK 0
 #define HOST_LEN 20
@@ -38,10 +38,6 @@
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 80*1024 //MB
 #define DENSITY_VALUE 10
-#define BF_SIZE 10
-#define BF_RATE 0.1
-//typedef int32_t VertexType;
-//typedef int32_t PartitionIDType;
 #define USE_SNAPPY
 //#define USE_HDFS
 //#define USE_ASYNC

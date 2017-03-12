@@ -11,24 +11,6 @@
 #include "Global.h"
 #include "Communication.h"
 
-std::atomic<int32_t> SKIPPED_PARTITIONS;
-
-void insert_bloom_pool(const int32_t P_ID, 
-                       std::map<int32_t, bloom_filter>& bf_pool,
-                       int32_t* indices,
-                       int32_t* indptr,
-                       int32_t len) {                    
-  int32_t i   = 0;
-  int32_t k   = 0;
-  int32_t tmp = 0;
-  for (i=0; i < len; i++) {
-    for (k = 0; k < indptr[i+1] - indptr[i]; k++) {
-      tmp = indices[indptr[i] + k];
-      bf_pool[P_ID].insert(tmp);
-    }
-  }
-}
-
 template<class T>
 bool comp_pagerank(const int32_t P_ID,
                    std::string DataPath,
@@ -37,9 +19,7 @@ bool comp_pagerank(const int32_t P_ID,
                    const int32_t* _VertexOut,
                    const int32_t* _VertexIn,
                    std::vector<bool>& ActiveVector,
-                   const int32_t step,
-                   std::map<int32_t, bloom_filter>& bf_pool,
-                   std::vector<int32_t>& ActiveVector_V) {
+                   const int32_t step) {
   _Computing_Num++;
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
@@ -96,31 +76,8 @@ bool comp_sssp(const int32_t P_ID,
                const int32_t* _VertexOut,
                const int32_t* _VertexIn,
                std::vector<bool>& ActiveVector,
-               const int32_t step,
-               std::map<int32_t, bloom_filter>& bf_pool,
-               std::vector<int32_t>& ActiveVector_V) {
+               const int32_t step) {
   _Computing_Num++;
-
-/*
-  bool skip = true; 
- if (step > 0) {
-  #pragma omp parallel for num_threads(OMPNUM) schedule(dynamic, 1000)
-    for (int32_t k=0; k<ActiveVector_V.size(); k++) {
-      if (skip) {
-        if (bf_pool[P_ID].contains(ActiveVector_V[k])) {
-          skip = false;
-          //break;
-        }
-      }
-    }
-  } else {skip = false;}
-  if (skip) {
-    //LOG(INFO) << "Rank " << _my_rank << " Step " << step << " Skip " << P_ID;
-    _Computing_Num--;
-    SKIPPED_PARTITIONS++;
-    return true;
-  }
-*/
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
   // LOG(INFO) << "Processing " << DataPath;
@@ -140,11 +97,6 @@ bool comp_sssp(const int32_t P_ID,
   result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
   result[end_id-start_id+0] = (int32_t)end_id%10000;
   // LOG(INFO) << end_id << " " << start_id;
-/*
-  if (step == 0) {
-    insert_bloom_pool(P_ID, std::ref(bf_pool), indices, indptr, end_id-start_id);
-  }
-*/
   int32_t i   = 0;
   int32_t j   = 0;
   T   min = 0;
@@ -181,9 +133,7 @@ bool comp_cc(const int32_t P_ID,
              const int32_t* _VertexOut,
              const int32_t* _VertexIn,
              std::vector<bool>& ActiveVector,
-             const int32_t step,
-             std::map<int32_t, bloom_filter>& bf_pool,
-             std::vector<int32_t>& ActiveVector_V) {
+             const int32_t step) {
   _Computing_Num++;
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
@@ -241,12 +191,9 @@ public:
                 const int32_t*,
                 const int32_t*,
                 std::vector<bool>&,
-                const int32_t,
-                std::map<int32_t, bloom_filter>&,
-                std::vector<int32_t>&
+                const int32_t
                ) = NULL;
   T _FilterThreshold;
-  bloom_parameters _bf_parameters;
   std::string _DataPath;
   std::string _Scheduler;
   int32_t _ThreadNum;
@@ -261,7 +208,6 @@ public:
   std::vector<T> _VertexData;
   std::vector<T> _VertexDataNew;
   std::vector<bool> _UpdatedLastIter;
-  std::map<int32_t, bloom_filter> _bf_pool;
   GraphPS();
   void init(std::string DataPath,
             const int32_t VertexNum,
@@ -312,15 +258,6 @@ void GraphPS<T>::init(std::string DataPath,
   LOG(INFO) << "Rank " << _my_rank << " "
             << " With Partitions From " << _PartitionID_Start << " To " << _PartitionID_End;
   _EdgeCache.reserve(_PartitionNum*2/_num_workers);
-  _bf_parameters.projected_element_count = BF_SIZE;
-  _bf_parameters.false_positive_probability = BF_RATE;
-  _bf_parameters.random_seed = 0xA5A5A5A5;
-  if (!_bf_parameters) {assert(1==0);}
-  _bf_parameters.compute_optimal_parameters();
-
-  for (int32_t k=0; k<_PartitionID_End-_PartitionID_Start; k++) {
-    _bf_pool[k] = bloom_filter(_bf_parameters);
-  }
 }
 
 template<class T>
@@ -395,10 +332,10 @@ void GraphPS<T>::run() {
   std::vector<std::future<bool>> comp_pool;
   std::vector<int32_t> ActiveVector_V;
   float updated_ratio = 1.0;
+  int32_t step = 0;
 
-   int32_t step = 0;
+  // start computation
   for (step = 0; step < _MaxIteration; step++) {
-    SKIPPED_PARTITIONS = 0;
     if (_my_rank==0) {
       LOG(INFO) << "Start Iteration: " << step;
     }
@@ -430,9 +367,7 @@ void GraphPS<T>::run() {
                                      _VertexOut.data(),
                                      _VertexIn.data(),
                                      std::ref(_UpdatedLastIter),
-                                     step,
-                                     std::ref(_bf_pool),
-                                     std::ref(ActiveVector_V)));
+                                     step));
     }
     barrier_threadpool(comp_pool, 0);
     barrier_workers();
@@ -446,7 +381,6 @@ void GraphPS<T>::run() {
       } else {
         _UpdatedLastIter[result_id] = true;
         changed_num += 1;
-      //  ActiveVector_V.push_back(result_id);
       }
 #else
       _VertexData[result_id] += _VertexDataNew[result_id];
@@ -455,7 +389,6 @@ void GraphPS<T>::run() {
       } else {
         _UpdatedLastIter[result_id] = true;
         changed_num += 1;
-      //  ActiveVector_V.push_back(result_id);
       }
 #endif
     }
