@@ -22,6 +22,7 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
+#include <tuple>
 #include <chrono>
 #include <future>
 #include <atomic>
@@ -38,7 +39,8 @@
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 80*1024 //MB
 #define DENSITY_VALUE 10
-#define USE_SNAPPY
+#define USE_SNAPPY_NETWORK
+#define USE_SNAPPY_CACHE
 //#define USE_HDFS
 //#define USE_ASYNC
 
@@ -61,29 +63,56 @@ int64_t INIT_TIME;
 int64_t COMP_TIME;
 int64_t APP_TIME;
 int64_t HDFS_TIME;
-std::unordered_map<int32_t, char *> _EdgeCache;
+struct EdgeCacheData {
+  char * data;
+  int32_t compressed_length;
+  int32_t uncompressed_length;
+};
+std::unordered_map<int32_t, EdgeCacheData> _EdgeCache;
 std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
  
 
 char *load_edge(int32_t p_id, std::string &DataPath) {
   if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
-    return _EdgeCache[p_id];
+#ifdef USE_SNAPPY_CACHE
+    char* uncompressed = new char[_EdgeCache[p_id].uncompressed_length];
+    assert (snappy::RawUncompress(_EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length, uncompressed) == true);
+    return uncompressed;
+#else
+    return _EdgeCache[p_id].data;
+#endif
   }
   cnpy::NpyArray npz = cnpy::npy_load(DataPath);
   int32_t npz_size = std::ceil(sizeof(int32_t)*npz.shape[0]*1.0/1024/1024);
   std::srand(std::time(0));
   if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
     _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
-    _EdgeCache[p_id] = npz.data;
+    EdgeCacheData newdata;
+#ifdef USE_SNAPPY_CACHE
+    char* compressed_data = new char[snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0])];
+    size_t compressed_length = 0;
+    snappy::RawCompress(npz.data, sizeof(int32_t)*npz.shape[0],  compressed_data, &compressed_length);
+    newdata.data = compressed_data;
+    newdata.compressed_length = compressed_length;
+    newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
+#else
+    newdata.data = npz.data;
+    newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
+#endif
+    _EdgeCache[p_id] = newdata;
   }
   return npz.data;
 }
 
 void clean_edge(int32_t p_id, char *data) {
+#ifdef USE_SNAPPY_CACHE
+    delete [] (data);
+#else
   if (_EdgeCache.find(p_id) == _EdgeCache.end()) {
     delete [] (data);
   }
+#endif
 }
 
 inline int get_worker_id() {
@@ -102,7 +131,7 @@ void finalize_workers() {
   delete [] (_all_hostname);
   zmq_ctx_destroy (_zmq_context);
   for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
-    delete [] t_it->second;
+    delete [] t_it->second.data;
   }
   barrier_workers();
   MPI_Finalize();

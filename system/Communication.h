@@ -27,7 +27,7 @@ void zmq_send(const char * data, const int length, const int rank, const int id)
 
 //to do design the port
 void graphps_send(std::string &data, const int length, const int rank) {
-#ifdef USE_SNAPPY
+#ifdef USE_SNAPPY_NETWORK
   std::string compressed_data;
   int compressed_length = snappy::Compress(data.c_str(), length, &compressed_data);
   if (length==1 && data[0] =='!') {
@@ -49,7 +49,7 @@ void graphps_send(std::string &data, const int length, const int rank) {
 }
 
 void graphps_send(const char * data, const int length, const int rank) {
-#ifdef USE_SNAPPY
+#ifdef USE_SNAPPY_NETWORK
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
   if (length==1 && *data == '!') {
@@ -95,7 +95,7 @@ void graphps_sendall(std::vector<T> & data_vector) {
     length = sizeof(T)*data_vector.size();
   }
   std::srand(std::time(0));
-#ifdef USE_SNAPPY
+#ifdef USE_SNAPPY_NETWORK
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
   //#pragma omp parallel for num_threads(OMPNUM) schedule(static)
@@ -124,7 +124,7 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
     memset(buffer, 0, ZMQ_BUFFER);
     int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
     std::string uncompressed;
-#ifdef USE_SNAPPY
+#ifdef USE_SNAPPY_NETWORK
     assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
 #else
     uncompressed.assign(buffer, length);
@@ -136,7 +136,7 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
       break;
     } else {
       T* raw_data = (T*) uncompressed.c_str();
-#ifdef USE_SNAPPY
+#ifdef USE_SNAPPY_NETWORK
       int32_t raw_data_len = (uncompressed.size()) / sizeof(T);
 #else
       int32_t raw_data_len = length / sizeof(T);

@@ -23,7 +23,6 @@ bool comp_pagerank(const int32_t P_ID,
   _Computing_Num++;
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
-  // LOG(INFO) << "Processing " << DataPath;
   char* EdgeDataNpy = load_edge(P_ID, DataPath);
   int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
   int32_t start_id = EdgeData[3];
@@ -39,7 +38,6 @@ bool comp_pagerank(const int32_t P_ID,
   result[end_id-start_id+2] = (int32_t)start_id%10000;
   result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
   result[end_id-start_id+0] = (int32_t)end_id%10000;
-  // LOG(INFO) << end_id << " " << start_id;
   int32_t i   = 0;
   int32_t k   = 0;
   int32_t tmp = 0;
@@ -60,10 +58,8 @@ bool comp_pagerank(const int32_t P_ID,
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
-  // char *c_result = reinterpret_cast<char*>(&result[0]);
   _Computing_Num--;
   if (changed_num > 0)
-    // graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     graphps_sendall<T>(std::ref(result));
   return true;
 }
@@ -80,7 +76,6 @@ bool comp_sssp(const int32_t P_ID,
   _Computing_Num++;
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
-  // LOG(INFO) << "Processing " << DataPath;
   char* EdgeDataNpy = load_edge(P_ID, DataPath);
   int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
   int32_t start_id = EdgeData[3];
@@ -115,10 +110,8 @@ bool comp_sssp(const int32_t P_ID,
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
-  // char *c_result = reinterpret_cast<char*>(&result[0]);
   _Computing_Num--;
   if (changed_num > 0) {
-    // graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     graphps_sendall<T>(std::ref(result));
   }
   return true;
@@ -153,7 +146,6 @@ bool comp_cc(const int32_t P_ID,
   result[end_id-start_id+2] = (int32_t)start_id%10000;
   result[end_id-start_id+1] = (int32_t)std::floor(end_id*1.0/10000);
   result[end_id-start_id+0] = (int32_t)end_id%10000;
-  // LOG(INFO) << end_id << " " << start_id;
   int32_t i   = 0;
   int32_t j   = 0;
   T   max = 0;
@@ -162,7 +154,6 @@ bool comp_cc(const int32_t P_ID,
   for (i = 0; i < end_id-start_id; i++) {
     max = VertexData[start_id+i];
     for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
-      //if (ActiveVector[indices[indptr[i]+j]] && max < VertexData[indices[indptr[i]+j]])
       if (max < VertexData[indices[indptr[i]+j]])
         max = VertexData[indices[indptr[i] + j]];
     }
@@ -173,10 +164,8 @@ bool comp_cc(const int32_t P_ID,
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
-  // char *c_result = reinterpret_cast<char*>(&result[0]);
   _Computing_Num--;
   if (changed_num > 0)
-    // graphps_sendall(c_result, sizeof(T)*(end_id-start_id+5));
     graphps_sendall<T>(std::ref(result));
   return true;
 }
