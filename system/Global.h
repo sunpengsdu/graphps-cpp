@@ -14,6 +14,7 @@
 #include <glog/logging.h>
 #include <zmq.h>
 #include <snappy.h>
+#include <zlib.h>
 #include <omp.h>
 #include <sched.h>
 #include <iostream>
@@ -37,7 +38,7 @@
 #define ZMQ_BUFFER 20*1024*1024
 #define OMPNUM 2
 #define GPS_INF 10000
-#define EDGE_CACHE_SIZE 80*1024 //MB
+#define EDGE_CACHE_SIZE 70*1024 //MB
 #define DENSITY_VALUE 10
 #define USE_SNAPPY_NETWORK
 #define USE_SNAPPY_CACHE
@@ -73,11 +74,21 @@ std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
  
 
+
+
+
+
 char *load_edge(int32_t p_id, std::string &DataPath) {
   if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
 #ifdef USE_SNAPPY_CACHE
     char* uncompressed = new char[_EdgeCache[p_id].uncompressed_length];
+    /* SNAPPY
     assert (snappy::RawUncompress(_EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length, uncompressed) == true);
+    */
+    //********** Zlib
+    size_t uncompressed_length = 0;
+    assert (uncompress(uncompressed, &uncompressed_length,  _EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length) == Z_OK);
+    //*********
     return uncompressed;
 #else
     return _EdgeCache[p_id].data;
@@ -90,9 +101,19 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
     _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
     EdgeCacheData newdata;
 #ifdef USE_SNAPPY_CACHE
-    char* compressed_data = new char[snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0])];
+    /* SNAPPY
     size_t compressed_length = 0;
-    snappy::RawCompress(npz.data, sizeof(int32_t)*npz.shape[0],  compressed_data, &compressed_length);
+    char* compressed_data_tmp = new char[snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0])];
+    snappy::RawCompress(npz.data, sizeof(int32_t)*npz.shape[0],  compressed_data_tmp, &compressed_length);
+    */
+    //*********** Zlib
+    size_t compressed_length = 0;
+    char* compressed_data_tmp = new char[compressBound(sizeof(int32_t)*npz.shape[0])];
+    compress2(compressed_data_tmp, &compressed_length, npz.data, sizeof(int32_t)*npz.shape[0], 2);
+    //***********
+    char* compressed_data = new char[compressed_length];
+    memcpy(compressed_data, compressed_data_tmp, compressed_length);
+    delete [] (compressed_data_tmp);
     newdata.data = compressed_data;
     newdata.compressed_length = compressed_length;
     newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];

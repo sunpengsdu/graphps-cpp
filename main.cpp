@@ -53,8 +53,8 @@ int main(int argc, char *argv[]) {
   //PagerankPS<int32_t> pg;
   //PagerankPS<float> pg;
   // Data Path, VertexNum number, Partition number, thread number, Max Iteration
-  pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 12, 20);
-  //pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294, 12, 20);
+  //pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 12, 20);
+  pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294, 12, 20);
   //pg.init("/home/mapred/GraphData/uk/edge3/", 787803000, 2379, 12, 20);
   //pg.init("/home/mapred/GraphData/webuk_3/", 133633040, 300, 12, 20);
   pg.run();
