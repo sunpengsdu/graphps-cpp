@@ -36,12 +36,12 @@
 #define ZMQ_PREFIX "tcp://*:"
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
-#define OMPNUM 2
+#define OMPNUM 1
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 70*1024 //MB
 #define DENSITY_VALUE 10
 #define USE_SNAPPY_NETWORK
-#define USE_SNAPPY_CACHE
+#define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 //#define USE_HDFS
 //#define USE_ASYNC
 
@@ -73,67 +73,96 @@ std::unordered_map<int32_t, EdgeCacheData> _EdgeCache;
 std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
  
-
-
-
-
-
 char *load_edge(int32_t p_id, std::string &DataPath) {
   if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
-#ifdef USE_SNAPPY_CACHE
-    char* uncompressed = new char[_EdgeCache[p_id].uncompressed_length];
-    /* SNAPPY
-    assert (snappy::RawUncompress(_EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length, uncompressed) == true);
-    */
-    //********** Zlib
-    size_t uncompressed_length = 0;
-    assert (uncompress(uncompressed, &uncompressed_length,  _EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length) == Z_OK);
-    //*********
+    char* uncompressed = NULL;
+    if (COMPRESS_CACHE_LEVEL == 1) {
+      uncompressed = new char[_EdgeCache[p_id].uncompressed_length];
+      assert (snappy::RawUncompress(_EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length, uncompressed) == true);
+    } else if (COMPRESS_CACHE_LEVEL == 2 || COMPRESS_CACHE_LEVEL == 3) {
+      uncompressed = new char[_EdgeCache[p_id].uncompressed_length];
+      size_t uncompressed_length = _EdgeCache[p_id].uncompressed_length;
+      int uncompress_result = 0;
+      uncompress_result = uncompress((Bytef *)uncompressed, 
+                                    &uncompressed_length, 
+                                    (Bytef *)_EdgeCache[p_id].data, 
+                                    _EdgeCache[p_id].compressed_length);
+      assert (uncompress_result == Z_OK);
+    } else if (COMPRESS_CACHE_LEVEL == 0){
+      uncompressed = _EdgeCache[p_id].data;
+    } else {
+      assert(1 == 0);
+    }
     return uncompressed;
-#else
-    return _EdgeCache[p_id].data;
-#endif
   }
+  // Cannot finf target data in cache
   cnpy::NpyArray npz = cnpy::npy_load(DataPath);
-  int32_t npz_size = std::ceil(sizeof(int32_t)*npz.shape[0]*1.0/1024/1024);
   std::srand(std::time(0));
   if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
-    _EdgeCache_Size.fetch_add(npz_size, std::memory_order_relaxed);
     EdgeCacheData newdata;
-#ifdef USE_SNAPPY_CACHE
-    /* SNAPPY
+    char* compressed_data_tmp = NULL;
+    char* compressed_data = NULL;
     size_t compressed_length = 0;
-    char* compressed_data_tmp = new char[snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0])];
-    snappy::RawCompress(npz.data, sizeof(int32_t)*npz.shape[0],  compressed_data_tmp, &compressed_length);
-    */
-    //*********** Zlib
-    size_t compressed_length = 0;
-    char* compressed_data_tmp = new char[compressBound(sizeof(int32_t)*npz.shape[0])];
-    compress2(compressed_data_tmp, &compressed_length, npz.data, sizeof(int32_t)*npz.shape[0], 2);
-    //***********
-    char* compressed_data = new char[compressed_length];
-    memcpy(compressed_data, compressed_data_tmp, compressed_length);
-    delete [] (compressed_data_tmp);
-    newdata.data = compressed_data;
-    newdata.compressed_length = compressed_length;
-    newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
-#else
-    newdata.data = npz.data;
-    newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
-#endif
+
+    if (COMPRESS_CACHE_LEVEL == 1) {
+      compressed_data_tmp = new char[snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0])];
+      snappy::RawCompress(npz.data, 
+                        sizeof(int32_t)*npz.shape[0],  
+                        compressed_data_tmp, 
+                        &compressed_length);
+    } else if (COMPRESS_CACHE_LEVEL == 2) {
+      size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
+      compressed_length = buf_size;
+      compressed_data_tmp = new char[buf_size];
+      int compress_result = 0;
+      compress_result = compress2((Bytef *)compressed_data_tmp, 
+                                &compressed_length, 
+                                (Bytef *)npz.data, 
+                                sizeof(int32_t)*npz.shape[0], 
+                                1);
+      assert(compress_result == Z_OK);
+    } else if (COMPRESS_CACHE_LEVEL == 3) {
+      size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
+      compressed_length = buf_size;
+      compressed_data_tmp = new char[buf_size];
+      int compress_result = 0;
+      compress_result = compress2((Bytef *)compressed_data_tmp, 
+                                &compressed_length, 
+                                (Bytef *)npz.data, 
+                                sizeof(int32_t)*npz.shape[0], 
+                                3);
+      assert(compress_result == Z_OK);
+    } else if (COMPRESS_CACHE_LEVEL == 0) {
+      newdata.data = npz.data;
+      newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
+      newdata.compressed_length = sizeof(int32_t)*npz.shape[0];  
+    } else {
+      assert (1 == 0);
+    }
+    
+    if (COMPRESS_CACHE_LEVEL > 0) {
+      compressed_data = new char[compressed_length];
+      memcpy(compressed_data, compressed_data_tmp, compressed_length);
+      delete [] (compressed_data_tmp);
+      newdata.data = compressed_data;
+      newdata.compressed_length = compressed_length;
+      newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
+    }
     _EdgeCache[p_id] = newdata;
+    int32_t new_cache_size = std::ceil(newdata.compressed_length*1.0/1024/1024);
+    _EdgeCache_Size.fetch_add(new_cache_size, std::memory_order_relaxed);
   }
   return npz.data;
 }
 
 void clean_edge(int32_t p_id, char *data) {
-#ifdef USE_SNAPPY_CACHE
+  if (COMPRESS_CACHE_LEVEL > 0)
     delete [] (data);
-#else
-  if (_EdgeCache.find(p_id) == _EdgeCache.end()) {
-    delete [] (data);
+  else {
+    if (_EdgeCache.find(p_id) == _EdgeCache.end()) {
+      delete [] (data);
+    }
   }
-#endif
 }
 
 inline int get_worker_id() {
