@@ -42,7 +42,7 @@ bool comp_pagerank(const int32_t P_ID,
   int32_t k   = 0;
   int32_t tmp = 0;
   T   rel = 0;
-  int32_t changed_num = 0;
+  int changed_num = 0;
   #pragma omp parallel for num_threads(OMPNUM) private(k, tmp, rel) reduction (+:changed_num) schedule(dynamic, 1000)
   for (i=0; i < end_id-start_id; i++) {
     rel = 0;
@@ -197,6 +197,8 @@ public:
   std::vector<T> _VertexData;
   std::vector<T> _VertexDataNew;
   std::vector<bool> _UpdatedLastIter;
+  bloom_parameters _bf_parameters;
+  std::map<int32_t, bloom_filter> _bf_pool;
   GraphPS();
   void init(std::string DataPath,
             const int32_t VertexNum,
@@ -247,6 +249,16 @@ void GraphPS<T>::init(std::string DataPath,
   LOG(INFO) << "Rank " << _my_rank << " "
             << " With Partitions From " << _PartitionID_Start << " To " << _PartitionID_End;
   _EdgeCache.reserve(_PartitionNum*2/_num_workers);
+#ifdef USE_BF
+  _bf_parameters.projected_element_count = BF_SIZE;
+  _bf_parameters.false_positive_probability = BF_RATE;
+  _bf_parameters.random_seed = 0xA5A5A5A5;
+  if (!_bf_parameters) {assert(1==0);}
+  _bf_parameters.compute_optimal_parameters();
+  for (int32_t k=_PartitionID_Start; k<_PartitionID_End; k++) {
+    _bf_pool[k] = bloom_filter(_bf_parameters);
+  }
+#endif
 }
 
 template<class T>
@@ -312,16 +324,42 @@ void GraphPS<T>::run() {
   std::vector<std::thread> zmq_server_pool;
   for (int32_t i=0; i<ZMQNUM; i++)
     zmq_server_pool.push_back(std::thread(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData), i));
-  barrier_workers();
-  stop_time_init();
-
- if (_my_rank==0)
-    LOG(INFO) << "Init Time: " << INIT_TIME << " ms";
-  LOG(INFO) << "Rank " << _my_rank << " use " << _ThreadNum << " comp threads";
   std::vector<std::future<bool>> comp_pool;
   std::vector<int32_t> ActiveVector_V;
+  std::vector<int32_t> Partitions(_PartitionID_End-_PartitionID_Start, 0);
+  std::vector<bool> Partitions_Active(_PartitionID_End-_PartitionID_Start, true);
   float updated_ratio = 1.0;
   int32_t step = 0;
+
+#ifdef USE_BF
+  #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) schedule(static)
+  for (int32_t t_pid = _PartitionID_Start; t_pid < _PartitionID_End; t_pid++) {
+    std::string DataPath;
+    DataPath = _DataPath + std::to_string(t_pid);
+    DataPath += ".edge.npy";
+    char* EdgeDataNpy = load_edge(t_pid, DataPath);
+    int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
+    int32_t t_start_id = EdgeData[3];
+    int32_t t_end_id = EdgeData[4];
+    int32_t indices_len = EdgeData[1];
+    int32_t indptr_len = EdgeData[2];
+    int32_t * indices = EdgeData + 5;
+    int32_t * indptr = EdgeData + 5 + indices_len;
+    int32_t i   = 0;
+    int32_t k   = 0;
+    for (i=0; i < t_end_id - t_start_id; i++) {
+      for (k = 0; k < indptr[i+1] - indptr[i]; k++) {
+        _bf_pool[t_pid].insert(indices[indptr[i] + k]);
+      }
+    }
+  }
+#endif
+
+  barrier_workers();
+  stop_time_init();
+  if (_my_rank==0)
+    LOG(INFO) << "Init Time: " << INIT_TIME << " ms";
+  LOG(INFO) << "Rank " << _my_rank << " use " << _ThreadNum << " comp threads";
 
   // start computation
   for (step = 0; step < _MaxIteration; step++) {
@@ -330,21 +368,18 @@ void GraphPS<T>::run() {
     }
     start_time_comp();
 #ifdef USE_ASYNC
-    // memcpy(_VertexDataNew.data(), _VertexData.data(), sizeof(T)*_VertexNum);
     _VertexDataNew.assign(_VertexData.begin(), _VertexData.end());
 #else
-    // memset(_VertexDataNew.data(), 0, sizeof(T)*_VertexNum);
     std::fill(_VertexDataNew.begin(), _VertexDataNew.end(), 0);
 #endif
-    std::vector<int32_t> Partitions;
     updated_ratio = 1.0;
 
-    for (int32_t k = _PartitionID_Start; k < _PartitionID_End; k++) {
-      Partitions.push_back(k);
+    for (int32_t k = 0; k < _PartitionID_End-_PartitionID_Start; k++) {
+      Partitions[k] = k + _PartitionID_Start;
     }
-
     std::random_shuffle(Partitions.begin(), Partitions.end());
     for (int32_t &P_ID : Partitions) {
+      if (Partitions_Active[P_ID-_PartitionID_Start] == false) {continue;}
       barrier_threadpool(comp_pool, _ThreadNum*2);
       while(_Computing_Num > _ThreadNum) {
         graphps_sleep(10);
@@ -362,8 +397,7 @@ void GraphPS<T>::run() {
     }
     barrier_threadpool(comp_pool, 0);
     barrier_workers();
-    int32_t changed_num = 0;
-    ActiveVector_V.clear();
+    int changed_num = 0;
     #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) reduction (+:changed_num)  schedule(static)
     for (int32_t result_id = 0; result_id < _VertexNum; result_id++) {
 #ifdef USE_ASYNC
@@ -383,15 +417,42 @@ void GraphPS<T>::run() {
       }
 #endif
     }
-    stop_time_comp();
     updated_ratio = changed_num * 1.0 / _VertexNum;
+    MPI_Bcast(&updated_ratio, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    Partitions_Active.assign(_PartitionID_End-_PartitionID_Start, true);
+#ifdef USE_BF
+    ActiveVector_V.clear();
+    if (updated_ratio < 1.0/10000) {
+      Partitions_Active.assign(_PartitionID_End-_PartitionID_Start, false);
+      for (int32_t t_vid=0; t_vid<_VertexNum; t_vid++) {
+        if (_UpdatedLastIter[t_vid] == true) 
+          ActiveVector_V.push_back(t_vid);
+      }
+      #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) schedule(static)
+      for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
+        for (int32_t t_vindex=0; t_vindex<ActiveVector_V.size(); t_vindex++) {
+          if (_bf_pool[t_pid].contains(ActiveVector_V[t_vindex]))
+            Partitions_Active[t_pid-_PartitionID_Start] = true;
+        }
+      }
+      int skipped_partition = 0;
+      int skipped_partition_total = 0;
+      for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
+        if (Partitions_Active[t_pid-_PartitionID_Start] == false) {skipped_partition++;}
+      }
+      MPI_Reduce(&skipped_partition, &skipped_partition_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+      if (_my_rank == 0)
+        LOG(INFO) << "Skip " << skipped_partition << " Partitions";
+    }
+#endif
+    MPI_Bcast(&changed_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    stop_time_comp();
     if (_my_rank==0)
       LOG(INFO) << "Iteration: " << step
                 << ", uses "<< COMP_TIME
                 << " ms, Update " << changed_num 
                 << ", Ratio " << updated_ratio;
     if (changed_num == 0) {
-      LOG(INFO) << "Rank " << _my_rank << " Stop Running";
       break;
     }
   }

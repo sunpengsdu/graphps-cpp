@@ -162,7 +162,7 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
        // memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
 #endif
       } else {
-       // #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
         for (int32_t k=0; k<(raw_data_len-5); k=k+2) {
 #ifdef USE_ASYNC
           VertexData[raw_data[k]+start_id] += raw_data[k+1];

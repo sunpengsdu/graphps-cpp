@@ -29,7 +29,7 @@
 #include <atomic>
 #include <algorithm>
 #include "cnpy.h"
-// #include "bloom_filter.hpp"
+#include "bloom_filter.hpp"
 
 #define MASTER_RANK 0
 #define HOST_LEN 20
@@ -39,11 +39,14 @@
 #define OMPNUM 1
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 70*1024 //MB
-#define DENSITY_VALUE 20
+#define DENSITY_VALUE 0
 #define USE_SNAPPY_NETWORK
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 //#define USE_HDFS
 //#define USE_ASYNC
+#define USE_BF
+#define BF_SIZE 5000000
+#define BF_RATE 0.01
 
 int  _my_rank;
 int  _num_workers;
