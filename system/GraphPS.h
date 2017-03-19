@@ -377,7 +377,7 @@ void GraphPS<T>::run() {
     for (int32_t &P_ID : Partitions) {
       if (Partitions_Active[P_ID-_PartitionID_Start] == false) {continue;}
       barrier_threadpool(comp_pool, _ThreadNum*2);
-      while(_Computing_Num > _ThreadNum) {
+      while(_Computing_Num > _ThreadNum*1.2) {
         graphps_sleep(10);
       }
       comp_pool.push_back(std::async(std::launch::async,

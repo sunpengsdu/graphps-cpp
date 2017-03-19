@@ -97,7 +97,8 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     data = reinterpret_cast<char*>(&data_vector[0]);
     length = sizeof(T)*data_vector.size();
   }
-  std::srand(std::time(0));
+  //std::srand(std::time(0));
+  std::srand(_my_rank);
 #ifdef USE_SNAPPY_NETWORK
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
