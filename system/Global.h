@@ -36,7 +36,6 @@
 #define ZMQ_PREFIX "tcp://*:"
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
-#define OMPNUM 1
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 70*1024 //MB
 #define DENSITY_VALUE 0
@@ -44,9 +43,10 @@
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 //#define USE_HDFS
 //#define USE_ASYNC
-#define USE_BF
+//#define USE_BF
 #define BF_SIZE 5000000
 #define BF_RATE 0.01
+#define ZMQNUM 16
 
 int  _my_rank;
 int  _num_workers;
@@ -54,7 +54,6 @@ int  _hostname_len;
 char _hostname[HOST_LEN];
 char *_all_hostname;
 void *_zmq_context;
-int ZMQNUM;
 std::chrono::steady_clock::time_point INIT_TIME_START;
 std::chrono::steady_clock::time_point INIT_TIME_END;
 std::chrono::steady_clock::time_point COMP_TIME_START;
@@ -247,9 +246,6 @@ void init_workers() {
   _zmq_context = zmq_ctx_new ();
   _EdgeCache_Size = 0;
   _Computing_Num = 0;
-  ZMQNUM = (int32_t)_num_workers*1.5;
-  if (ZMQNUM < 3)
-      ZMQNUM = 3;
   barrier_workers();
 }
 

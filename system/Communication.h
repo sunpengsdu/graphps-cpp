@@ -101,13 +101,11 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
 #ifdef USE_SNAPPY_NETWORK
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
-  //#pragma omp parallel for num_threads(OMPNUM) schedule(static)
   for (int rank = 0; rank < _num_workers; rank++)
-    zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
+    zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (std::rand())%ZMQNUM);
 #else
-  //#pragma omp parallel for num_threads(OMPNUM) schedule(static)
   for (int rank = 0; rank < _num_workers; rank++)
-    zmq_send(data, length,  (rank+_my_rank)%_num_workers, (_my_rank+std::rand())%ZMQNUM);
+    zmq_send(data, length,  (rank+_my_rank)%_num_workers, (std::rand())%ZMQNUM);
 #endif
 }
 
@@ -150,19 +148,16 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
       if (density >= DENSITY_VALUE) {
         assert(end_id-start_id == raw_data_len-5);
 #ifdef USE_ASYNC
-        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
         for (int32_t k=0; k<(end_id-start_id); k++) {
           VertexData[k+start_id] += raw_data[k];
         }
 #else
-        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
         for (int32_t k=0; k<(end_id-start_id); k++) {
           VertexDataNew[k+start_id] = raw_data[k];
         }
        // memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
 #endif
       } else {
-        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
         for (int32_t k=0; k<(raw_data_len-5); k=k+2) {
 #ifdef USE_ASYNC
           VertexData[raw_data[k]+start_id] += raw_data[k+1];

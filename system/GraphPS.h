@@ -43,7 +43,6 @@ bool comp_pagerank(const int32_t P_ID,
   int32_t tmp = 0;
   T   rel = 0;
   int changed_num = 0;
-  #pragma omp parallel for num_threads(OMPNUM) private(k, tmp, rel) reduction (+:changed_num) schedule(dynamic, 1000)
   for (i=0; i < end_id-start_id; i++) {
     rel = 0;
     for (k = 0; k < indptr[i+1] - indptr[i]; k++) {
@@ -96,7 +95,6 @@ bool comp_sssp(const int32_t P_ID,
   int32_t j   = 0;
   T   min = 0;
   int32_t changed_num = 0;
-  #pragma omp parallel for num_threads(OMPNUM) private(j, min) reduction (+:changed_num) schedule(dynamic, 1000)
   for (i = 0; i < end_id-start_id; i++) {
     min = VertexData[start_id+i];
     for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
@@ -150,7 +148,6 @@ bool comp_cc(const int32_t P_ID,
   int32_t j   = 0;
   T   max = 0;
   int32_t changed_num = 0;
-  #pragma omp parallel for num_threads(OMPNUM) private(j, max)  reduction (+:changed_num) schedule(dynamic, 1000)
   for (i = 0; i < end_id-start_id; i++) {
     max = VertexData[start_id+i];
     for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
@@ -289,7 +286,6 @@ void GraphPS<T>::run() {
   hdfs_re = system("rm /home/mapred/tmp/satgraph/*");
   std::string hdfs_bin = "/opt/hadoop-1.2.1/bin/hadoop fs -get ";
   std::string hdfs_dst = "/home/mapred/tmp/satgraph/";
-  #pragma omp parallel for num_threads(OMPNUM) schedule(static)
   for (int32_t k=_PartitionID_Start; k<_PartitionID_End; k++) {
     std::string hdfs_command;
     hdfs_command = hdfs_bin + _DataPath;
@@ -332,7 +328,7 @@ void GraphPS<T>::run() {
   int32_t step = 0;
 
 #ifdef USE_BF
-  #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) schedule(static)
+  #pragma omp parallel for num_threads(_ThreadNum) schedule(static)
   for (int32_t t_pid = _PartitionID_Start; t_pid < _PartitionID_End; t_pid++) {
     std::string DataPath;
     DataPath = _DataPath + std::to_string(t_pid);
@@ -398,7 +394,7 @@ void GraphPS<T>::run() {
     barrier_threadpool(comp_pool, 0);
     barrier_workers();
     int changed_num = 0;
-    #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) reduction (+:changed_num)  schedule(static)
+    #pragma omp parallel for num_threads(_ThreadNum) reduction (+:changed_num)  schedule(static)
     for (int32_t result_id = 0; result_id < _VertexNum; result_id++) {
 #ifdef USE_ASYNC
       if (_VertexDataNew[result_id] == _VertexData[result_id]) {
@@ -428,7 +424,7 @@ void GraphPS<T>::run() {
         if (_UpdatedLastIter[t_vid] == true) 
           ActiveVector_V.push_back(t_vid);
       }
-      #pragma omp parallel for num_threads(_ThreadNum*OMPNUM) schedule(static)
+      #pragma omp parallel for num_threads(_ThreadNum) schedule(static)
       for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
         for (int32_t t_vindex=0; t_vindex<ActiveVector_V.size(); t_vindex++) {
           if (_bf_pool[t_pid].contains(ActiveVector_V[t_vindex]))

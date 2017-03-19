@@ -20,7 +20,7 @@ public:
   }
   void init_vertex() {
     this->load_vertex_out();
-    #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+    #pragma omp parallel for num_threads(this->_ThreadNum) schedule(static)
     for (int32_t i=0; i<this->_VertexNum; i++) {
       if (this->_VertexOut[i] == 0)
         this->_VertexOut[i] = 1;
