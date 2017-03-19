@@ -39,7 +39,7 @@
 #define OMPNUM 1
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 70*1024 //MB
-#define DENSITY_VALUE 10
+#define DENSITY_VALUE 20
 #define USE_SNAPPY_NETWORK
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 //#define USE_HDFS

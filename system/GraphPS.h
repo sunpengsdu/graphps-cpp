@@ -57,10 +57,10 @@ bool comp_pagerank(const int32_t P_ID,
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
+  result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
   _Computing_Num--;
   if (changed_num > 0)
-    graphps_sendall<T>(std::ref(result));
+    graphps_sendall<T>(std::ref(result), changed_num);
   return true;
 }
 
@@ -109,10 +109,10 @@ bool comp_sssp(const int32_t P_ID,
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
+  result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
   _Computing_Num--;
   if (changed_num > 0) {
-    graphps_sendall<T>(std::ref(result));
+    graphps_sendall<T>(std::ref(result), changed_num);
   }
   return true;
 }
@@ -163,10 +163,10 @@ bool comp_cc(const int32_t P_ID,
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
+  result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
   _Computing_Num--;
   if (changed_num > 0)
-    graphps_sendall<T>(std::ref(result));
+    graphps_sendall<T>(std::ref(result), changed_num);
   return true;
 }
 
@@ -330,9 +330,11 @@ void GraphPS<T>::run() {
     }
     start_time_comp();
 #ifdef USE_ASYNC
-    memcpy(_VertexDataNew.data(), _VertexData.data(), sizeof(T)*_VertexNum);
+    // memcpy(_VertexDataNew.data(), _VertexData.data(), sizeof(T)*_VertexNum);
+    _VertexDataNew.assign(_VertexData.begin(), _VertexData.end());
 #else
-    memset(_VertexDataNew.data(), 0, sizeof(T)*_VertexNum);
+    // memset(_VertexDataNew.data(), 0, sizeof(T)*_VertexNum);
+    std::fill(_VertexDataNew.begin(), _VertexDataNew.end(), 0);
 #endif
     std::vector<int32_t> Partitions;
     updated_ratio = 1.0;
@@ -388,7 +390,10 @@ void GraphPS<T>::run() {
                 << ", uses "<< COMP_TIME
                 << " ms, Update " << changed_num 
                 << ", Ratio " << updated_ratio;
-  if (changed_num == 0) {break;}
+    if (changed_num == 0) {
+      LOG(INFO) << "Rank " << _my_rank << " Stop Running";
+      break;
+    }
   }
   graphps_send("!", 1, _my_rank);
   for (int32_t i=0; i<ZMQNUM; i++)

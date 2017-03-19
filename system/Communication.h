@@ -71,18 +71,21 @@ void graphps_send(const char * data, const int length, const int rank) {
 }
 
 template<class T>
-void graphps_sendall(std::vector<T> & data_vector) {
+void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   int32_t length = 0;
-  int32_t density = data_vector.back();
+  int32_t density = (int32_t)data_vector.back();
   char* data = NULL;
   std::vector<T> sparsedata_vector;
+  int32_t changed_num_verify = 0;
   if (density < DENSITY_VALUE) {
     for (int32_t k=0; k<data_vector.size()-5; k++) {
       if (data_vector[k] != 0) {
         sparsedata_vector.push_back(k);
         sparsedata_vector.push_back(data_vector[k]);
+        changed_num_verify++;
       }
     }
+    assert(changed_num_verify == changed_num);
     sparsedata_vector.push_back(data_vector[data_vector.size()-5]);
     sparsedata_vector.push_back(data_vector[data_vector.size()-4]);
     sparsedata_vector.push_back(data_vector[data_vector.size()-3]);
@@ -152,10 +155,14 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
           VertexData[k+start_id] += raw_data[k];
         }
 #else
-        memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
+        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+        for (int32_t k=0; k<(end_id-start_id); k++) {
+          VertexDataNew[k+start_id] = raw_data[k];
+        }
+       // memcpy(VertexDataNew.data()+start_id, raw_data, sizeof(T)*(end_id-start_id));
 #endif
       } else {
-        #pragma omp parallel for num_threads(OMPNUM) schedule(static)
+       // #pragma omp parallel for num_threads(OMPNUM) schedule(static)
         for (int32_t k=0; k<(raw_data_len-5); k=k+2) {
 #ifdef USE_ASYNC
           VertexData[raw_data[k]+start_id] += raw_data[k+1];
