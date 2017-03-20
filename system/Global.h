@@ -46,7 +46,7 @@
 //#define USE_BF
 #define BF_SIZE 5000000
 #define BF_RATE 0.01
-#define ZMQNUM 16
+#define ZMQNUM 20
 
 int  _my_rank;
 int  _num_workers;
@@ -264,7 +264,7 @@ void barrier_threadpool(std::vector<std::future<bool>> &comp_pool, int32_t thres
       }
     }
     if (comp_pool.size() > threshold) {
-      graphps_sleep(10);
+      graphps_sleep(5);
       continue;
     } else {
       break;

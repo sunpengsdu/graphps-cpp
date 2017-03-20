@@ -97,16 +97,15 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     data = reinterpret_cast<char*>(&data_vector[0]);
     length = sizeof(T)*data_vector.size();
   }
-  //std::srand(std::time(0));
-  std::srand(_my_rank);
+  std::srand(std::time(0));
 #ifdef USE_SNAPPY_NETWORK
   std::string compressed_data;
   int compressed_length = snappy::Compress(data, length, &compressed_data);
   for (int rank = 0; rank < _num_workers; rank++)
-    zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (std::rand())%ZMQNUM);
+    zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers,  (_my_rank+std::rand())%ZMQNUM);
 #else
   for (int rank = 0; rank < _num_workers; rank++)
-    zmq_send(data, length,  (rank+_my_rank)%_num_workers, (std::rand())%ZMQNUM);
+    zmq_send(data, length,  (rank+_my_rank)%_num_workers, (_my_rank+std::rand())%ZMQNUM);
 #endif
 }
 
