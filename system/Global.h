@@ -26,6 +26,7 @@
 #include <tuple>
 #include <chrono>
 #include <future>
+#include <exception>
 #include <atomic>
 #include <algorithm>
 #include "cnpy.h"
