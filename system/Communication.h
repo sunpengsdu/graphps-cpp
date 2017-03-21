@@ -43,7 +43,7 @@ void graphps_send(const char * data, const int length, const int rank) {
                               &compressed_length,
                               (Bytef *)data,
                               length,
-                              3);
+                              6);
     assert(compress_result == Z_OK);
     zmq_send(compressed_data, compressed_length, rank, 0);
     delete [] (compressed_data);
@@ -83,13 +83,13 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
 
   if (COMPRESS_NETWORK_LEVEL == 0) {
     for (int rank = 0; rank < _num_workers; rank++) {
-      zmq_send(data, length, rank,  0);
+      zmq_send(data, length, (rank+_my_rank)%_num_workers,  0);
     }
   } else if (COMPRESS_NETWORK_LEVEL == 1) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
     for (int rank = 0; rank < _num_workers; rank++) {
-      zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
+      zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers, 0);
     }
   } else if (COMPRESS_NETWORK_LEVEL > 1) {
     size_t compressed_length = 0;
@@ -102,10 +102,10 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
                               &compressed_length,
                               (Bytef *)data,
                               length,
-                              3);
+                              6);
     assert(compress_result == Z_OK);
     for (int rank = 0; rank < _num_workers; rank++) {
-      zmq_send(compressed_data, compressed_length, rank, 0);
+      zmq_send(compressed_data, compressed_length, (rank+_my_rank)%_num_workers, 0);
     }
     delete [] (compressed_data);
   } else {

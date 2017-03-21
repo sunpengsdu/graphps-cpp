@@ -40,14 +40,14 @@
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 70*1024 //MB
 #define DENSITY_VALUE 0
-#define COMPRESS_NETWORK_LEVEL 1 //0, 1, 2
+#define COMPRESS_NETWORK_LEVEL 1  //0, 1, 2
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 //#define USE_HDFS
 //#define USE_ASYNC
 //#define USE_BF
 #define BF_SIZE 5000000
 #define BF_RATE 0.01
-#define ZMQNUM 12
+#define ZMQNUM 20
 
 int  _my_rank;
 int  _num_workers;
