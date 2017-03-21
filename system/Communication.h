@@ -26,13 +26,13 @@ void zmq_send(const char * data, const int length, const int rank, const int id)
 }
 
 void graphps_send(const char * data, const int length, const int rank) {
-  if (COMPRESS_CACHE_LEVEL == 0) {
+  if (COMPRESS_NETWORK_LEVEL == 0) {
     zmq_send(data, length, rank,  0);
-  } else if (COMPRESS_CACHE_LEVEL == 1) {
+  } else if (COMPRESS_NETWORK_LEVEL == 1) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
     zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
-  } else if (COMPRESS_CACHE_LEVEL > 1) {
+  } else if (COMPRESS_NETWORK_LEVEL > 1) {
     size_t compressed_length = 0;
     char* compressed_data = NULL;
     size_t buf_size = compressBound(length);
@@ -81,17 +81,17 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   }
   std::srand(std::time(0));
 
-  if (COMPRESS_CACHE_LEVEL == 0) {
+  if (COMPRESS_NETWORK_LEVEL == 0) {
     for (int rank = 0; rank < _num_workers; rank++) {
       zmq_send(data, length, rank,  0);
     }
-  } else if (COMPRESS_CACHE_LEVEL == 1) {
+  } else if (COMPRESS_NETWORK_LEVEL == 1) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
     for (int rank = 0; rank < _num_workers; rank++) {
       zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
     }
-  } else if (COMPRESS_CACHE_LEVEL > 1) {
+  } else if (COMPRESS_NETWORK_LEVEL > 1) {
     size_t compressed_length = 0;
     char* compressed_data = NULL;
     size_t buf_size = compressBound(length);
@@ -123,11 +123,11 @@ void graphps_server_backend(std::vector<T>& VertexDataNew, std::vector<T>& Verte
     memset(buffer, 0, ZMQ_BUFFER);
     int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
     std::string uncompressed;
-    if (COMPRESS_CACHE_LEVEL == 0) {
+    if (COMPRESS_NETWORK_LEVEL == 0) {
       uncompressed.assign(buffer, length);
-    } else if (COMPRESS_CACHE_LEVEL == 1) {
+    } else if (COMPRESS_NETWORK_LEVEL == 1) {
       assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
-    } else if (COMPRESS_CACHE_LEVEL > 1) {
+    } else if (COMPRESS_NETWORK_LEVEL > 1) {
       int uncompress_result = 0;
       size_t uncompressed_length = ZMQ_BUFFER;
       uncompress_result = uncompress((Bytef *)uncompressed_c,

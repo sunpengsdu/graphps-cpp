@@ -47,7 +47,7 @@
 //#define USE_BF
 #define BF_SIZE 5000000
 #define BF_RATE 0.01
-#define ZMQNUM 20
+#define ZMQNUM 12
 
 int  _my_rank;
 int  _num_workers;
