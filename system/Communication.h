@@ -35,14 +35,14 @@ void graphps_send(const char * data, const int length, const int rank) {
   } else if (COMPRESS_CACHE_LEVEL > 1) {
     size_t compressed_length = 0;
     char* compressed_data = NULL;
-    size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
+    size_t buf_size = compressBound(length);
     compressed_length = buf_size;
     compressed_data = new char[buf_size];
     int compress_result = 0;
     compress_result = compress2((Bytef *)compressed_data,
                               &compressed_length,
                               (Bytef *)data,
-                              sizeof(int32_t)*npz.shape[0],
+                              length,
                               3);
     assert(compress_result == Z_OK);
     zmq_send(compressed_data, compressed_length, rank, 0);
@@ -94,14 +94,14 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   } else if (COMPRESS_CACHE_LEVEL > 1) {
     size_t compressed_length = 0;
     char* compressed_data = NULL;
-    size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
+    size_t buf_size = compressBound(length);
     compressed_length = buf_size;
     compressed_data = new char[buf_size];
     int compress_result = 0;
     compress_result = compress2((Bytef *)compressed_data,
                               &compressed_length,
                               (Bytef *)data,
-                              sizeof(int32_t)*npz.shape[0],
+                              length,
                               3);
     assert(compress_result == Z_OK);
     for (int rank = 0; rank < _num_workers; rank++) {
@@ -135,7 +135,7 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
       assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
     } else if (COMPRESS_CACHE_LEVEL > 1) {
       int uncompress_result = 0;
-      int uncompressed_length = ZMQ_BUFFER;
+      size_t uncompressed_length = ZMQ_BUFFER;
       uncompress_result = uncompress((Bytef *)uncompressed_c,
                                     &uncompressed_length,
                                     (Bytef *)buffer,
