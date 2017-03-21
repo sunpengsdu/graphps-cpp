@@ -115,14 +115,8 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
 
 template<class T>
 void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, int32_t id) {
-  //  Socket to talk to clients
-  // std::string server_addr(ZMQ_PREFIX);
-  // server_addr += std::to_string(ZMQ_PORT+_my_rank);
-  // server_addr += std::to_string(ZMQ_PORT+id);
-  // LOG(INFO) << "Rank " << _my_rank << " Setup ZMQ Server " << server_addr;
   void *responder = zmq_socket (_zmq_context, ZMQ_REP);
-  int rc = zmq_connect (responder, "inproc://graphps_servers");
-  assert (rc == 0);
+  assert(zmq_connect (responder, "inproc://graphps") == 0);
   char *buffer = new char[ZMQ_BUFFER];
   char *uncompressed_c = new char[ZMQ_BUFFER];
   while (1) {
