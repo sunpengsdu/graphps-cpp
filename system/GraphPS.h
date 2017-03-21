@@ -318,18 +318,7 @@ void GraphPS<T>::run() {
 
   init_vertex();
 
-  std::string server_addr(ZMQ_PREFIX);
-  server_addr += std::to_string(ZMQ_PORT);
-  void *server_frontend = zmq_socket (_zmq_context, ZMQ_ROUTER);
-  assert (server_frontend);
-  assert (zmq_bind (server_frontend, server_addr.c_str()) == 0);
-  void *server_backend = zmq_socket (_zmq_context, ZMQ_DEALER);
-  assert(server_backend);
-  assert (zmq_bind (server_backend, "inproc://graphps") == 0);
-  std::vector<std::thread> zmq_server_pool;
-  for (int32_t i=0; i<ZMQNUM; i++)
-    zmq_server_pool.push_back(std::thread(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData), i));
-  zmq_proxy (server_frontend, server_backend, NULL);
+  std::thread graphps_server_mt(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData));
 
   std::vector<std::future<bool>> comp_pool;
   std::vector<int32_t> ActiveVector_V;

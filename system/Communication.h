@@ -114,7 +114,7 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
 }
 
 template<class T>
-void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, int32_t id) {
+void graphps_server_backend(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, int32_t id) {
   void *responder = zmq_socket (_zmq_context, ZMQ_REP);
   assert(zmq_connect (responder, "inproc://graphps") == 0);
   char *buffer = new char[ZMQ_BUFFER];
@@ -166,6 +166,22 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, i
     }
     zmq_send (responder, "ACK", 3, 0);
   }
+}
+
+template<class T>
+void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData) {
+  std::string server_addr(ZMQ_PREFIX);
+  server_addr += std::to_string(ZMQ_PORT);
+  void *server_frontend = zmq_socket (_zmq_context, ZMQ_ROUTER);
+  assert (server_frontend);
+  assert (zmq_bind (server_frontend, server_addr.c_str()) == 0);
+  void *server_backend = zmq_socket (_zmq_context, ZMQ_DEALER);
+  assert(server_backend);
+  assert (zmq_bind (server_backend, "inproc://graphps") == 0);
+  std::vector<std::thread> zmq_server_pool;
+  for (int32_t i=0; i<ZMQNUM; i++)
+    zmq_server_pool.push_back(std::thread(graphps_server_backend<T>, std::ref(VertexDataNew), std::ref(VertexData), i));
+  zmq_proxy (server_frontend, server_backend, NULL);
 }
 
 #endif /* SYSTEM_COMMUNICATION_H_ */
