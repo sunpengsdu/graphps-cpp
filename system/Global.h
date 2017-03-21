@@ -39,7 +39,7 @@
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 70*1024 //MB
 #define DENSITY_VALUE 0
-#define USE_SNAPPY_NETWORK
+#define COMPRESS_NETWORK_LEVEL 1 //0, 1, 2
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 //#define USE_HDFS
 //#define USE_ASYNC
@@ -74,7 +74,7 @@ struct EdgeCacheData {
 std::unordered_map<int32_t, EdgeCacheData> _EdgeCache;
 std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
- 
+
 char *load_edge(int32_t p_id, std::string &DataPath) {
   if (_EdgeCache.find(p_id) != _EdgeCache.end()) {
     char* uncompressed = NULL;
@@ -85,9 +85,9 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       uncompressed = new char[_EdgeCache[p_id].uncompressed_length];
       size_t uncompressed_length = _EdgeCache[p_id].uncompressed_length;
       int uncompress_result = 0;
-      uncompress_result = uncompress((Bytef *)uncompressed, 
-                                    &uncompressed_length, 
-                                    (Bytef *)_EdgeCache[p_id].data, 
+      uncompress_result = uncompress((Bytef *)uncompressed,
+                                    &uncompressed_length,
+                                    (Bytef *)_EdgeCache[p_id].data,
                                     _EdgeCache[p_id].compressed_length);
       assert (uncompress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 0){
@@ -108,19 +108,19 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
 
     if (COMPRESS_CACHE_LEVEL == 1) {
       compressed_data_tmp = new char[snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0])];
-      snappy::RawCompress(npz.data, 
-                        sizeof(int32_t)*npz.shape[0],  
-                        compressed_data_tmp, 
+      snappy::RawCompress(npz.data,
+                        sizeof(int32_t)*npz.shape[0],
+                        compressed_data_tmp,
                         &compressed_length);
     } else if (COMPRESS_CACHE_LEVEL == 2) {
       size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
       compressed_length = buf_size;
       compressed_data_tmp = new char[buf_size];
       int compress_result = 0;
-      compress_result = compress2((Bytef *)compressed_data_tmp, 
-                                &compressed_length, 
-                                (Bytef *)npz.data, 
-                                sizeof(int32_t)*npz.shape[0], 
+      compress_result = compress2((Bytef *)compressed_data_tmp,
+                                &compressed_length,
+                                (Bytef *)npz.data,
+                                sizeof(int32_t)*npz.shape[0],
                                 1);
       assert(compress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 3) {
@@ -128,20 +128,20 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       compressed_length = buf_size;
       compressed_data_tmp = new char[buf_size];
       int compress_result = 0;
-      compress_result = compress2((Bytef *)compressed_data_tmp, 
-                                &compressed_length, 
-                                (Bytef *)npz.data, 
-                                sizeof(int32_t)*npz.shape[0], 
+      compress_result = compress2((Bytef *)compressed_data_tmp,
+                                &compressed_length,
+                                (Bytef *)npz.data,
+                                sizeof(int32_t)*npz.shape[0],
                                 3);
       assert(compress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 0) {
       newdata.data = npz.data;
       newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
-      newdata.compressed_length = sizeof(int32_t)*npz.shape[0];  
+      newdata.compressed_length = sizeof(int32_t)*npz.shape[0];
     } else {
       assert (1 == 0);
     }
-    
+
     if (COMPRESS_CACHE_LEVEL > 0) {
       compressed_data = new char[compressed_length];
       memcpy(compressed_data, compressed_data_tmp, compressed_length);

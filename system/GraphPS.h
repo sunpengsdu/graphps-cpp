@@ -421,7 +421,7 @@ void GraphPS<T>::run() {
     if (updated_ratio < 1.0/10000) {
       Partitions_Active.assign(_PartitionID_End-_PartitionID_Start, false);
       for (int32_t t_vid=0; t_vid<_VertexNum; t_vid++) {
-        if (_UpdatedLastIter[t_vid] == true) 
+        if (_UpdatedLastIter[t_vid] == true)
           ActiveVector_V.push_back(t_vid);
       }
       #pragma omp parallel for num_threads(_ThreadNum) schedule(static)
@@ -446,13 +446,12 @@ void GraphPS<T>::run() {
     if (_my_rank==0)
       LOG(INFO) << "Iteration: " << step
                 << ", uses "<< COMP_TIME
-                << " ms, Update " << changed_num 
+                << " ms, Update " << changed_num
                 << ", Ratio " << updated_ratio;
     if (changed_num == 0) {
       break;
     }
   }
-  graphps_send("!", 1, _my_rank);
   for (int32_t i=0; i<ZMQNUM; i++)
     zmq_server_pool[i].join();
 }
