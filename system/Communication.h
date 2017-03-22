@@ -82,12 +82,14 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   std::srand(std::time(0));
 
   if (COMPRESS_NETWORK_LEVEL == 0) {
+    #pragma omp parallel for num_threads(4) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       zmq_send(data, length, (rank+_my_rank)%_num_workers,  0);
     }
   } else if (COMPRESS_NETWORK_LEVEL == 1) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
+    #pragma omp parallel for num_threads(4) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers, 0);
     }
@@ -104,6 +106,7 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
                               length,
                               6);
     assert(compress_result == Z_OK);
+    #pragma omp parallel for num_threads(4) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       zmq_send(compressed_data, compressed_length, (rank+_my_rank)%_num_workers, 0);
     }

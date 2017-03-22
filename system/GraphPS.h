@@ -286,6 +286,7 @@ void GraphPS<T>::run() {
   hdfs_re = system("rm /home/mapred/tmp/satgraph/*");
   std::string hdfs_bin = "/opt/hadoop-1.2.1/bin/hadoop fs -get ";
   std::string hdfs_dst = "/home/mapred/tmp/satgraph/";
+  #pragma omp parallel for num_threads(6) schedule(static)
   for (int32_t k=_PartitionID_Start; k<_PartitionID_End; k++) {
     std::string hdfs_command;
     hdfs_command = hdfs_bin + _DataPath;
@@ -317,10 +318,8 @@ void GraphPS<T>::run() {
   ////////////////
 
   init_vertex();
-
   std::thread graphps_server_mt(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData));
-
-  std::vector<std::future<bool>> comp_pool;
+  // std::vector<std::future<bool>> comp_pool;
   std::vector<int32_t> ActiveVector_V;
   std::vector<int32_t> Partitions(_PartitionID_End-_PartitionID_Start, 0);
   std::vector<bool> Partitions_Active(_PartitionID_End-_PartitionID_Start, true);
@@ -374,24 +373,15 @@ void GraphPS<T>::run() {
       Partitions[k] = k + _PartitionID_Start;
     }
     std::random_shuffle(Partitions.begin(), Partitions.end());
-    for (int32_t &P_ID : Partitions) {
+
+    #pragma omp parallel for num_threads(_ThreadNum) schedule(dynamic)
+    for (int32_t k=0; k<Partitions.size(); k++) {
+      int32_t P_ID = Partitions[k];
       if (Partitions_Active[P_ID-_PartitionID_Start] == false) {continue;}
-      barrier_threadpool(comp_pool, _ThreadNum*2);
-      while(_Computing_Num > _ThreadNum*1.2) {
-        graphps_sleep(5);
-      }
-      comp_pool.push_back(std::async(std::launch::async,
-                                     _comp,
-                                     P_ID,
-                                     _DataPath,
-                                     _VertexNum,
-                                     _VertexData.data(),
-                                     _VertexOut.data(),
-                                     _VertexIn.data(),
-                                     std::ref(_UpdatedLastIter),
-                                     step));
+      (*_comp)(P_ID,  _DataPath, _VertexNum,
+               _VertexData.data(), _VertexOut.data(), _VertexIn.data(),
+               std::ref(_UpdatedLastIter), step);
     }
-    barrier_threadpool(comp_pool, 0);
     barrier_workers();
     int changed_num = 0;
     #pragma omp parallel for num_threads(_ThreadNum) reduction (+:changed_num)  schedule(static)
