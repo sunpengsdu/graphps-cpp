@@ -57,7 +57,7 @@ bool comp_pagerank(const int32_t P_ID,
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
+  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
 
 #ifdef USE_ASYNC
   for (int32_t k=0; k<(end_id-start_id); k++) {
@@ -119,7 +119,7 @@ bool comp_sssp(const int32_t P_ID,
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
+  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
 
 #ifdef USE_ASYNC
   for (int32_t k=0; k<(end_id-start_id); k++) {
@@ -183,7 +183,7 @@ bool comp_cc(const int32_t P_ID,
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
-  result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
+  result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
 
 #ifdef USE_ASYNC
   for (int32_t k=0; k<(end_id-start_id); k++) {

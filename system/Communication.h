@@ -58,6 +58,7 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   int32_t density = (int32_t)data_vector.back();
   char* data = NULL;
   std::vector<T> sparsedata_vector;
+  sparsedata_vector.reserve(2.2*changed_num);
   int32_t changed_num_verify = 0;
   if (density < DENSITY_VALUE) {
     for (int32_t k=0; k<data_vector.size()-5; k++) {
@@ -87,7 +88,7 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   std::random_shuffle(random_rank.begin(), random_rank.end());
 
   if (COMPRESS_NETWORK_LEVEL == 0) {
-    #pragma omp parallel for num_threads(4) schedule(dynamic)
+    #pragma omp parallel for num_threads(2) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       int target_rank = random_rank[rank];
       // zmq_send(data, length, (rank+_my_rank)%_num_workers,  0);
@@ -97,7 +98,7 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   } else if (COMPRESS_NETWORK_LEVEL == 1) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
-    #pragma omp parallel for num_threads(4) schedule(dynamic)
+    #pragma omp parallel for num_threads(2) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       int target_rank = random_rank[rank];
       // zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers, 0);
@@ -117,7 +118,7 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
                               length,
                               6);
     assert(compress_result == Z_OK);
-    #pragma omp parallel for num_threads(4) schedule(dynamic)
+    #pragma omp parallel for num_threads(2) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       int target_rank = random_rank[rank];
       if (target_rank != _my_rank)
