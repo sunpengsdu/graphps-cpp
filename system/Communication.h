@@ -80,18 +80,27 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     length = sizeof(T)*data_vector.size();
   }
   std::srand(std::time(0));
+  std::vector<int32_t> random_rank;
+  for (int rank=0; rank<_num_workers; rank++) {
+    random_rank.push_back(rank);
+  }
+  std::random_shuffle(random_rank.begin(), random_rank.end());
 
   if (COMPRESS_NETWORK_LEVEL == 0) {
     #pragma omp parallel for num_threads(4) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
-      zmq_send(data, length, (rank+_my_rank)%_num_workers,  0);
+      int target_rank = random_rank[rank];
+      // zmq_send(data, length, (rank+_my_rank)%_num_workers,  0);
+      zmq_send(data, length, target_rank,  0);
     }
   } else if (COMPRESS_NETWORK_LEVEL == 1) {
     std::string compressed_data;
     int compressed_length = snappy::Compress(data, length, &compressed_data);
     #pragma omp parallel for num_threads(4) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
-      zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers, 0);
+      int target_rank = random_rank[rank];
+      // zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers, 0);
+      zmq_send(compressed_data.c_str(), compressed_length, target_rank, 0);
     }
   } else if (COMPRESS_NETWORK_LEVEL > 1) {
     size_t compressed_length = 0;
@@ -108,7 +117,8 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     assert(compress_result == Z_OK);
     #pragma omp parallel for num_threads(4) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
-      zmq_send(compressed_data, compressed_length, (rank+_my_rank)%_num_workers, 0);
+      int target_rank = random_rank[rank];
+      zmq_send(compressed_data, compressed_length, target_rank, 0);
     }
     delete [] (compressed_data);
   } else {
