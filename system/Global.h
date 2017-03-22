@@ -42,7 +42,7 @@
 #define DENSITY_VALUE 0
 #define COMPRESS_NETWORK_LEVEL 1  //0, 1, 2
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
-//#define USE_HDFS
+// #define USE_HDFS
 //#define USE_ASYNC
 //#define USE_BF
 #define BF_SIZE 5000000

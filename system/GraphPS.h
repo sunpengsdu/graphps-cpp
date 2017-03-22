@@ -15,7 +15,8 @@ template<class T>
 bool comp_pagerank(const int32_t P_ID,
                    std::string DataPath,
                    const int32_t VertexNum,
-                   const T* VertexData,
+                   T* VertexData,
+                   T* VertexDataNew,
                    const int32_t* _VertexOut,
                    const int32_t* _VertexIn,
                    std::vector<bool>& ActiveVector,
@@ -57,6 +58,16 @@ bool comp_pagerank(const int32_t P_ID,
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
+
+#ifdef USE_ASYNC
+  for (int32_t k=0; k<(end_id-start_id); k++) {
+    VertexData[k+start_id] += result[k];
+#else
+  for (int32_t k=0; k<(end_id-start_id); k++) {
+    VertexDataNew[k+start_id] = result[k];
+  }
+#endif
+
   _Computing_Num--;
   if (changed_num > 0)
     graphps_sendall<T>(std::ref(result), changed_num);
@@ -67,7 +78,8 @@ template<class T>
 bool comp_sssp(const int32_t P_ID,
                std::string DataPath,
                const int32_t VertexNum,
-               const T* VertexData,
+               T* VertexData,
+               T* VertexDataNew,
                const int32_t* _VertexOut,
                const int32_t* _VertexIn,
                std::vector<bool>& ActiveVector,
@@ -108,6 +120,16 @@ bool comp_sssp(const int32_t P_ID,
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
+
+#ifdef USE_ASYNC
+  for (int32_t k=0; k<(end_id-start_id); k++) {
+    VertexData[k+start_id] += result[k];
+#else
+  for (int32_t k=0; k<(end_id-start_id); k++) {
+    VertexDataNew[k+start_id] = result[k];
+  }
+#endif
+
   _Computing_Num--;
   if (changed_num > 0) {
     graphps_sendall<T>(std::ref(result), changed_num);
@@ -120,7 +142,8 @@ template<class T>
 bool comp_cc(const int32_t P_ID,
              std::string DataPath,
              const int32_t VertexNum,
-             const T* VertexData,
+             T* VertexData,
+             T* VertexDataNew,
              const int32_t* _VertexOut,
              const int32_t* _VertexIn,
              std::vector<bool>& ActiveVector,
@@ -161,6 +184,16 @@ bool comp_cc(const int32_t P_ID,
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num/(end_id-start_id); //sparsity ratio
+
+#ifdef USE_ASYNC
+  for (int32_t k=0; k<(end_id-start_id); k++) {
+    VertexData[k+start_id] += result[k];
+#else
+  for (int32_t k=0; k<(end_id-start_id); k++) {
+    VertexDataNew[k+start_id] = result[k];
+  }
+#endif
+
   _Computing_Num--;
   if (changed_num > 0)
     graphps_sendall<T>(std::ref(result), changed_num);
@@ -173,7 +206,8 @@ public:
   bool (*_comp)(const int32_t,
                 std::string,
                 const int32_t,
-                const T*,
+                T*,
+                T*,
                 const int32_t*,
                 const int32_t*,
                 std::vector<bool>&,
@@ -379,7 +413,8 @@ void GraphPS<T>::run() {
       int32_t P_ID = Partitions[k];
       if (Partitions_Active[P_ID-_PartitionID_Start] == false) {continue;}
       (*_comp)(P_ID,  _DataPath, _VertexNum,
-               _VertexData.data(), _VertexOut.data(), _VertexIn.data(),
+               _VertexData.data(), _VertexDataNew.data(),
+               _VertexOut.data(), _VertexIn.data(),
                std::ref(_UpdatedLastIter), step);
     }
     barrier_workers();
