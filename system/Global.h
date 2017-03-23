@@ -43,8 +43,8 @@
 #define COMPRESS_NETWORK_LEVEL 1  //0, 1, 2
 #define COMPRESS_CACHE_LEVEL 0 //0, 1, 2, 3
 // #define USE_HDFS
-//#define USE_ASYNC
-//#define USE_BF
+// #define USE_ASYNC
+// #define USE_BF
 #define BF_SIZE 5000000
 #define BF_RATE 0.01
 #define ZMQNUM 20

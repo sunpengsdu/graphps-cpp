@@ -62,6 +62,7 @@ bool comp_pagerank(const int32_t P_ID,
 #ifdef USE_ASYNC
   for (int32_t k=0; k<(end_id-start_id); k++) {
     VertexData[k+start_id] += result[k];
+  }
 #else
   for (int32_t k=0; k<(end_id-start_id); k++) {
     VertexDataNew[k+start_id] = result[k];
@@ -126,6 +127,7 @@ bool comp_sssp(const int32_t P_ID,
 #ifdef USE_ASYNC
   for (int32_t k=0; k<(end_id-start_id); k++) {
     VertexData[k+start_id] += result[k];
+  }
 #else
   for (int32_t k=0; k<(end_id-start_id); k++) {
     VertexDataNew[k+start_id] = result[k];
@@ -190,6 +192,7 @@ bool comp_cc(const int32_t P_ID,
 #ifdef USE_ASYNC
   for (int32_t k=0; k<(end_id-start_id); k++) {
     VertexData[k+start_id] += result[k];
+  }
 #else
   for (int32_t k=0; k<(end_id-start_id); k++) {
     VertexDataNew[k+start_id] = result[k];
@@ -447,7 +450,7 @@ void GraphPS<T>::run() {
     Partitions_Active.assign(_PartitionID_End-_PartitionID_Start, true);
 #ifdef USE_BF
     ActiveVector_V.clear();
-    if (updated_ratio < 1.0/10000) {
+    if (updated_ratio < 5.0/100000) {
       Partitions_Active.assign(_PartitionID_End-_PartitionID_Start, false);
       for (int32_t t_vid=0; t_vid<_VertexNum; t_vid++) {
         if (_UpdatedLastIter[t_vid] == true)
@@ -456,18 +459,20 @@ void GraphPS<T>::run() {
       #pragma omp parallel for num_threads(_ThreadNum) schedule(static)
       for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
         for (int32_t t_vindex=0; t_vindex<ActiveVector_V.size(); t_vindex++) {
-          if (_bf_pool[t_pid].contains(ActiveVector_V[t_vindex]))
+          if (Partitions_Active[t_pid-_PartitionID_Start] == false &&
+            _bf_pool[t_pid].contains(ActiveVector_V[t_vindex])) {
             Partitions_Active[t_pid-_PartitionID_Start] = true;
+          }
         }
       }
-      int skipped_partition = 0;
-      int skipped_partition_total = 0;
-      for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
-        if (Partitions_Active[t_pid-_PartitionID_Start] == false) {skipped_partition++;}
-      }
-      MPI_Reduce(&skipped_partition, &skipped_partition_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-      if (_my_rank == 0)
-        LOG(INFO) << "Skip " << skipped_partition << " Partitions";
+    //  int skipped_partition = 0;
+    //  int skipped_partition_total = 0;
+    //  for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
+    //    if (Partitions_Active[t_pid-_PartitionID_Start] == false) {skipped_partition++;}
+    //  }
+    //  MPI_Reduce(&skipped_partition, &skipped_partition_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    //  if (_my_rank == 0)
+    //    LOG(INFO) << "Skip " << skipped_partition << " Partitions";
     }
 #endif
     MPI_Bcast(&changed_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
