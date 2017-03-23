@@ -107,11 +107,13 @@ bool comp_sssp(const int32_t P_ID,
   int32_t j   = 0;
   T   min = 0;
   int32_t changed_num = 0;
+  T tmp;
   for (i = 0; i < end_id-start_id; i++) {
     min = VertexData[start_id+i];
     for (j = 0; j < indptr[i+1] - indptr[i]; j++) {
-      if (ActiveVector[indices[indptr[i]+j]] && min > VertexData[indices[indptr[i]+j]] + 1)
-        min = VertexData[indices[indptr[i] + j]] + 1;
+      tmp = VertexData[indices[indptr[i] + j]] + 1;
+      if (ActiveVector[indices[indptr[i]+j]] && min > tmp)
+        min = tmp;
     }
     if (min != VertexData[start_id+i]) {
       result[i] = min - VertexData[start_id+i];
@@ -353,6 +355,7 @@ void GraphPS<T>::run() {
 
   init_vertex();
   std::thread graphps_server_mt(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData));
+  // graphps_server_mt.detach();
   // std::vector<std::future<bool>> comp_pool;
   std::vector<int32_t> ActiveVector_V;
   std::vector<int32_t> Partitions(_PartitionID_End-_PartitionID_Start, 0);
@@ -384,6 +387,11 @@ void GraphPS<T>::run() {
   }
 #endif
 
+#ifdef USE_ASYNC
+  _VertexDataNew.assign(_VertexData.begin(), _VertexData.end());
+#else
+  std::fill(_VertexDataNew.begin(), _VertexDataNew.end(), 0);
+#endif
   barrier_workers();
   stop_time_init();
   if (_my_rank==0)
@@ -396,13 +404,7 @@ void GraphPS<T>::run() {
       LOG(INFO) << "Start Iteration: " << step;
     }
     start_time_comp();
-#ifdef USE_ASYNC
-    _VertexDataNew.assign(_VertexData.begin(), _VertexData.end());
-#else
-    std::fill(_VertexDataNew.begin(), _VertexDataNew.end(), 0);
-#endif
     updated_ratio = 1.0;
-
     for (int32_t k = 0; k < _PartitionID_End-_PartitionID_Start; k++) {
       Partitions[k] = k + _PartitionID_Start;
     }
@@ -428,6 +430,7 @@ void GraphPS<T>::run() {
         _UpdatedLastIter[result_id] = true;
         changed_num += 1;
       }
+      _VertexDataNew[result_id] = _VertexData[result_id];
 #else
       _VertexData[result_id] += _VertexDataNew[result_id];
       if (_VertexDataNew[result_id] == 0) {
@@ -436,6 +439,7 @@ void GraphPS<T>::run() {
         _UpdatedLastIter[result_id] = true;
         changed_num += 1;
       }
+      _VertexDataNew[result_id] = 0;
 #endif
     }
     updated_ratio = changed_num * 1.0 / _VertexNum;

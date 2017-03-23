@@ -45,9 +45,9 @@ int main(int argc, char *argv[]) {
   // pg.init("/home/mapred/GraphData/uk/edge3/", 787803000, 2379, 12, 20);
   //pg.init("/home/mapred/GraphData/webuk_3/", 133633040, 300, 22, 20);
   pg.run();
-  finalize_workers();
   stop_time_app();
   LOG(INFO) << "Used " << APP_TIME/1000.0 << " s";
+  finalize_workers();
   return 0;
 }
 

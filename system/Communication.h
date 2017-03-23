@@ -136,9 +136,11 @@ void graphps_server_backend(std::vector<T>& VertexDataNew, std::vector<T>& Verte
   assert(zmq_connect (responder, "inproc://graphps") == 0);
   char *buffer = new char[ZMQ_BUFFER];
   char *uncompressed_c = new char[ZMQ_BUFFER];
+  memset(buffer, 0, ZMQ_BUFFER);
   while (1) {
-    memset(buffer, 0, ZMQ_BUFFER);
+    // memset(buffer, 0, ZMQ_BUFFER);
     int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
+    if (length == -1) {break;}
     std::string uncompressed;
     if (COMPRESS_NETWORK_LEVEL == 0) {
       uncompressed.assign(buffer, length);
@@ -198,6 +200,8 @@ void graphps_server(std::vector<T>& VertexDataNew, std::vector<T>& VertexData) {
   std::vector<std::thread> zmq_server_pool;
   for (int32_t i=0; i<ZMQNUM; i++)
     zmq_server_pool.push_back(std::thread(graphps_server_backend<T>, std::ref(VertexDataNew), std::ref(VertexData), i));
+  // for (int32_t i=0; i<ZMQNUM; i++) 
+  //   zmq_server_pool[i].detach();
   zmq_proxy (server_frontend, server_backend, NULL);
 }
 

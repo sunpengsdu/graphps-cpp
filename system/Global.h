@@ -181,12 +181,11 @@ void barrier_workers() {
 
 void finalize_workers() {
   LOG(INFO) << "Finalizing the application";
-  delete [] (_all_hostname);
   zmq_ctx_destroy (_zmq_context);
+  delete [] (_all_hostname);
   for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
     delete [] t_it->second.data;
   }
-  barrier_workers();
   MPI_Finalize();
 }
 
