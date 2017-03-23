@@ -136,30 +136,32 @@ void graphps_server_backend(std::vector<T>& VertexDataNew, std::vector<T>& Verte
   assert(zmq_connect (responder, "inproc://graphps") == 0);
   char *buffer = new char[ZMQ_BUFFER];
   char *uncompressed_c = new char[ZMQ_BUFFER];
+  size_t uncompressed_length;
   memset(buffer, 0, ZMQ_BUFFER);
   while (1) {
     // memset(buffer, 0, ZMQ_BUFFER);
     int length = zmq_recv (responder, buffer, ZMQ_BUFFER, 0);
     if (length == -1) {break;}
-    std::string uncompressed;
+    assert(length < ZMQ_BUFFER);
     if (COMPRESS_NETWORK_LEVEL == 0) {
-      uncompressed.assign(buffer, length);
+      memcpy(uncompressed_c, buffer, length);
+      uncompressed_length = length;
     } else if (COMPRESS_NETWORK_LEVEL == 1) {
-      assert (snappy::Uncompress(buffer, length, &uncompressed) == true);
+      assert (snappy::RawUncompress(buffer, length, uncompressed_c) == true);
+      assert (snappy::GetUncompressedLength(buffer, length, &uncompressed_length) == true);
     } else if (COMPRESS_NETWORK_LEVEL > 1) {
       int uncompress_result = 0;
-      size_t uncompressed_length = ZMQ_BUFFER;
+      uncompressed_length = ZMQ_BUFFER*1.1;
       uncompress_result = uncompress((Bytef *)uncompressed_c,
                                     &uncompressed_length,
                                     (Bytef *)buffer,
                                     length);
       assert (uncompress_result == Z_OK);
-      uncompressed.assign(uncompressed_c, uncompressed_length);
     } else {
       assert (1 == 0);
     }
-    T* raw_data = (T*) uncompressed.c_str();
-    int32_t raw_data_len = (uncompressed.size()) / sizeof(T);
+    T* raw_data = (T*) uncompressed_c;
+    int32_t raw_data_len = uncompressed_length / sizeof(T);
     int32_t density = raw_data[raw_data_len-1];
     int32_t start_id = (int32_t)raw_data[raw_data_len-2]*10000 + (int32_t)raw_data[raw_data_len-3];
     int32_t end_id = (int32_t)raw_data[raw_data_len-4]*10000 + (int32_t)raw_data[raw_data_len-5];
