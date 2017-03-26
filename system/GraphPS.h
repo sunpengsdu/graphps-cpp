@@ -239,7 +239,6 @@ public:
   void init(std::string DataPath,
             const int32_t VertexNum,
             const int32_t PartitionNum,
-            const int32_t ThreadNum=4,
             const int32_t MaxIteration=10);
 
 //    virtual void compute(const int32_t PartitionID)=0;
@@ -264,10 +263,9 @@ template<class T>
 void GraphPS<T>::init(std::string DataPath,
                       const int32_t VertexNum,
                       const int32_t PartitionNum,
-                      const int32_t ThreadNum,
                       const int32_t MaxIteration) {
   start_time_init();
-  _ThreadNum = ThreadNum;
+  _ThreadNum = CMPNUM;
   _DataPath = DataPath;
   _VertexNum = VertexNum;
   _PartitionNum = PartitionNum;
@@ -285,6 +283,11 @@ void GraphPS<T>::init(std::string DataPath,
   LOG(INFO) << "Rank " << _my_rank << " "
             << " With Partitions From " << _PartitionID_Start << " To " << _PartitionID_End;
   _EdgeCache.reserve(_PartitionNum*2/_num_workers);
+  for (int i = 0; i < _ThreadNum; i++) {
+    _Send_Buffer[i] = NULL;
+    _Send_Buffer_Lock[i] = 0;
+    _Send_Buffer_Len[i] = 0;
+  }
 #ifdef USE_BF
   _bf_parameters.projected_element_count = BF_SIZE;
   _bf_parameters.false_positive_probability = BF_RATE;
@@ -403,9 +406,6 @@ void GraphPS<T>::run() {
 
   // start computation
   for (step = 0; step < _MaxIteration; step++) {
-    if (_my_rank==0) {
-      LOG(INFO) << "Start Iteration: " << step;
-    }
     start_time_comp();
     updated_ratio = 1.0;
     for (int32_t k = 0; k < _PartitionID_End-_PartitionID_Start; k++) {
@@ -448,6 +448,9 @@ void GraphPS<T>::run() {
     updated_ratio = changed_num * 1.0 / _VertexNum;
     MPI_Bcast(&updated_ratio, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
     Partitions_Active.assign(_PartitionID_End-_PartitionID_Start, true);
+
+    int skipped_partition = 0;
+    int skipped_partition_total = 0;
 #ifdef USE_BF
     ActiveVector_V.clear();
     if (updated_ratio < 5.0/100000) {
@@ -465,15 +468,11 @@ void GraphPS<T>::run() {
           }
         }
       }
-    //  int skipped_partition = 0;
-    //  int skipped_partition_total = 0;
-    //  for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
-    //    if (Partitions_Active[t_pid-_PartitionID_Start] == false) {skipped_partition++;}
-    //  }
-    //  MPI_Reduce(&skipped_partition, &skipped_partition_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    //  if (_my_rank == 0)
-    //    LOG(INFO) << "Skip " << skipped_partition << " Partitions";
     }
+    for (int32_t t_pid=_PartitionID_Start; t_pid<_PartitionID_End; t_pid++) {
+      if (Partitions_Active[t_pid-_PartitionID_Start] == false) {skipped_partition++;}
+    }
+    MPI_Reduce(&skipped_partition, &skipped_partition_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 #endif
     MPI_Bcast(&changed_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
     stop_time_comp();
@@ -481,7 +480,8 @@ void GraphPS<T>::run() {
       LOG(INFO) << "Iteration: " << step
                 << ", uses "<< COMP_TIME
                 << " ms, Update " << changed_num
-                << ", Ratio " << updated_ratio;
+                << ", Ratio " << updated_ratio
+                << ", Skip " << skipped_partition_total;
     if (changed_num == 0) {
       break;
     }

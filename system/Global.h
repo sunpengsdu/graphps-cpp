@@ -47,7 +47,8 @@
 // #define USE_BF
 #define BF_SIZE 5000000
 #define BF_RATE 0.01
-#define ZMQNUM 20
+#define ZMQNUM 22
+#define CMPNUM 22
 
 int  _my_rank;
 int  _num_workers;
@@ -75,6 +76,9 @@ struct EdgeCacheData {
 std::unordered_map<int32_t, EdgeCacheData> _EdgeCache;
 std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _Computing_Num;
+std::unordered_map<int, char*> _Send_Buffer;
+std::unordered_map<int, size_t> _Send_Buffer_Len;
+std::unordered_map<int, std::atomic<int>> _Send_Buffer_Lock;
 
 char *load_edge(int32_t p_id, std::string &DataPath) {
   if (_EdgeCache.find(p_id) != _EdgeCache.end()) {

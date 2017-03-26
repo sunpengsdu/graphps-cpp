@@ -1,7 +1,8 @@
 CCOMPILE=/opt/mpich/bin/mpic++
 PLATFORM=Linux-amd64-64
 LIB = -L/usr/local/lib
-LDFLAGS = -lzmq -lsnappy -lz -lpthread -lglog -O3 -m64 --force-addr  -ftree-vectorize -msse4 -ftree-vectorizer-verbose=1 -maccumulate-outgoing-args -fprefetch-loop-arrays -fopenmp 
+# LDFLAGS = -lzmq -lsnappy -lz -lpthread -lglog -O3 -m64 --force-addr  -ftree-vectorize -msse4 -ftree-vectorizer-verbose=1 -maccumulate-outgoing-args -fprefetch-loop-arrays -fopenmp 
+LDFLAGS = -lzmq -lsnappy -lz -lpthread -lglog -O3 -m64 -ftree-vectorize -msse4 -fopenmp 
 
 all: run
 

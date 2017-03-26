@@ -36,11 +36,11 @@ int main(int argc, char *argv[]) {
   init_workers();
   PagerankPS<double> pg;
   //PagerankPS<float> pg;
-  // Data Path, VertexNum number, Partition number, thread number, Max Iteration
-   pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 22, 2000);
-  //pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294, 23, 20);
-  //pg.init("/home/mapred/GraphData/uk/edge3/", 787803000, 2379, 23, 20);
-  // pg.init("/home/mapred/GraphData/webuk_3/", 133633040, 300, 22, 2000);
+  // Data Path, VertexNum number, Partition number,  Max Iteration
+  pg.init("/home/mapred/GraphData/eu/edge/", 1070560000, 5096, 2000);
+  // pg.init("/home/mapred/GraphData/twitter/edge2/", 41652250, 294,  2000);
+  //pg.init("/home/mapred/GraphData/uk/edge3/", 787803000, 2379,  2000);
+  // pg.init("/home/mapred/GraphData/webuk_3/", 133633040, 300, 2000);
   pg.run();
   stop_time_app();
   LOG(INFO) << "Used " << APP_TIME/1000.0 << " s";
