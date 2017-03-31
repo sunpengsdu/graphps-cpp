@@ -43,7 +43,7 @@ void graphps_send(const char * data, const int length, const int rank) {
                               &compressed_length,
                               (Bytef *)data,
                               length,
-                              6);
+                              1);
     assert(compress_result == Z_OK);
     zmq_send(compressed_data, compressed_length, rank, 0);
     delete [] (compressed_data);
@@ -91,15 +91,13 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   std::random_shuffle(random_rank.begin(), random_rank.end());
 
   if (COMPRESS_NETWORK_LEVEL == 0) {
-    #pragma omp parallel for num_threads(2) schedule(dynamic)
+//    #pragma omp parallel for num_threads(2) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       int target_rank = random_rank[rank];
-      // zmq_send(data, length, (rank+_my_rank)%_num_workers,  0);
       if (target_rank != _my_rank)
         zmq_send(data, length, target_rank,  0);
     }
   } else if (COMPRESS_NETWORK_LEVEL == 1) {
-    // char* compressed_data = new char[snappy::MaxCompressedLength(length)];
     size_t max_compressed_length = snappy::MaxCompressedLength(length);
     size_t compressed_length = 0;
     if (_Send_Buffer_Len[omp_id] < max_compressed_length) {
@@ -109,14 +107,12 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     }
     char *compressed_data = _Send_Buffer[omp_id];
     snappy::RawCompress(data, length, compressed_data, &compressed_length);
-    #pragma omp parallel for num_threads(2) schedule(dynamic)
+//    #pragma omp parallel for num_threads(2) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       int target_rank = random_rank[rank];
-      // zmq_send(compressed_data.c_str(), compressed_length, (rank+_my_rank)%_num_workers, 0);
       if (target_rank != _my_rank)
         zmq_send(compressed_data, compressed_length, target_rank, 0);
     }
-    // delete [] (compressed_data);
   } else if (COMPRESS_NETWORK_LEVEL > 1) {
     size_t buf_size = compressBound(length);
     int compress_result = 0;
@@ -132,15 +128,14 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
                               &compressed_length,
                               (Bytef *)data,
                               length,
-                              3);
+                              1);
     assert(compress_result == Z_OK);
-    #pragma omp parallel for num_threads(2) schedule(dynamic)
+//    #pragma omp parallel for num_threads(2) schedule(dynamic)
     for (int rank = 0; rank < _num_workers; rank++) {
       int target_rank = random_rank[rank];
       if (target_rank != _my_rank)
         zmq_send(compressed_data, compressed_length, target_rank, 0);
     }
-    // delete [] (compressed_data);
   } else {
     assert (1 == 0);
   }
