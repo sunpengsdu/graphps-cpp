@@ -116,8 +116,8 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       int required_len = _EdgeCache[p_id].uncompressed_length;
       if (_Edge_Buffer_Len[omp_id] < required_len) {
         if (_Edge_Buffer_Len[omp_id] > 0) {delete [] (_Edge_Buffer[omp_id]);}
-        _Edge_Buffer[omp_id] = new char[required_len];
-        _Edge_Buffer_Len[omp_id] = required_len;
+        _Edge_Buffer[omp_id] = new char[int(required_len*1.2)];
+        _Edge_Buffer_Len[omp_id] = int(required_len*1.2);
       }
       uncompressed = _Edge_Buffer[omp_id];
       assert (snappy::RawUncompress(_EdgeCache[p_id].data, _EdgeCache[p_id].compressed_length, uncompressed) == true);
@@ -125,8 +125,8 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       size_t uncompressed_length = _EdgeCache[p_id].uncompressed_length;
       if (_Edge_Buffer_Len[omp_id] < uncompressed_length) {
         if (_Edge_Buffer_Len[omp_id] > 0) {delete [] (_Edge_Buffer[omp_id]);}
-        _Edge_Buffer[omp_id] = new char[uncompressed_length];
-        _Edge_Buffer_Len[omp_id] = uncompressed_length;
+        _Edge_Buffer[omp_id] = new char[int(uncompressed_length*1.2)];
+        _Edge_Buffer_Len[omp_id] = int(uncompressed_length*1.2);
       }
       uncompressed = _Edge_Buffer[omp_id];
       int uncompress_result = 0;

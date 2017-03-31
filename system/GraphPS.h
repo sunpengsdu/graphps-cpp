@@ -403,10 +403,6 @@ void GraphPS<T>::run() {
   std::thread graphps_server_mt(graphps_server<T>, std::ref(_VertexDataNew), std::ref(_VertexData));
   std::vector<int32_t> ActiveVector_V;
   std::vector<int32_t> Partitions(_Allocated_Partition.size(), 0);
-  std::map<int32_t, bool> Partitions_Active;
-  for (int32_t k=0; k<_Allocated_Partition.size(); k++) {
-    Partitions_Active[_Allocated_Partition[k]] = true;
-  }
   float updated_ratio = 1.0;
   int32_t step = 0;
 
@@ -434,7 +430,6 @@ void GraphPS<T>::run() {
     #pragma omp parallel for num_threads(_ThreadNum) schedule(dynamic)
     for (int32_t k=0; k<Partitions.size(); k++) {
       int32_t P_ID = Partitions[k];
-      if (Partitions_Active[P_ID] == false) {continue;}
       (*_comp)(P_ID,  _DataPath, _VertexNum,
                _VertexData.data(), _VertexDataNew.data(),
                _VertexOut.data(), _VertexIn.data(),
@@ -469,21 +464,12 @@ void GraphPS<T>::run() {
     }
     updated_ratio = changed_num * 1.0 / _VertexNum;
     MPI_Bcast(&updated_ratio, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-    for (int32_t tk=0; tk<_Allocated_Partition.size(); tk++) {
-      Partitions_Active[_Allocated_Partition[tk]] = true;
-    }
-
-    int skipped_partition = 0;
-    int skipped_partition_total = 0;
-    MPI_Bcast(&changed_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
     stop_time_comp();
     if (_my_rank==0)
       LOG(INFO) << "Iteration: " << step
                 << ", uses "<< COMP_TIME
                 << " ms, Update " << changed_num
-                << ", Ratio " << updated_ratio
-                << ", Skip " << skipped_partition_total;
+                << ", Ratio " << updated_ratio;
     if (changed_num == 0) {
       break;
     }
