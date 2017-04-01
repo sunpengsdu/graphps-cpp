@@ -326,11 +326,14 @@ void GraphPS<T>::init(std::string DataPath,
     _Edge_Buffer[i] = NULL;
     _Edge_Buffer_Lock[i] = 0;
     _Edge_Buffer_Len[i] = 0;
+    _Uncompressed_Buffer[i] = NULL;
+    _Uncompressed_Buffer_Len[i] = 0;
+    _Uncompressed_Buffer_Lock[i] = 0;
   }
   int32_t data_size = GetDataSize(DataPath) * 1.0 / 1024 / 1024 / 1024; //GB 
   int32_t cache_size = _num_workers * EDGE_CACHE_SIZE / 1024; //GB
   //0:1, 1:0.45, 2:0.25, 3:0.19
-  if (data_size <= cache_size*1.2) 
+  if (data_size <= cache_size*1.1) 
     COMPRESS_CACHE_LEVEL = 0;
   else
     COMPRESS_CACHE_LEVEL = 2;
@@ -464,12 +467,25 @@ void GraphPS<T>::run() {
     }
     updated_ratio = changed_num * 1.0 / _VertexNum;
     MPI_Bcast(&updated_ratio, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    int missed_num = _Missed_Num;
+    int total_missed_num = _Missed_Num;
+    int cache_size = _EdgeCache_Size;
+    int total_cache_size = _EdgeCache_Size;
+    int cache_size_uncompress = _EdgeCache_Size_Uncompress;
+    int total_cache_size_uncompress = _EdgeCache_Size_Uncompress;
+    MPI_Reduce(&missed_num, &total_missed_num, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&cache_size, &total_cache_size, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&cache_size_uncompress, &total_cache_size_uncompress, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    _Missed_Num = 0;
     stop_time_comp();
     if (_my_rank==0)
       LOG(INFO) << "Iteration: " << step
                 << ", uses "<< COMP_TIME
                 << " ms, Update " << changed_num
-                << ", Ratio " << updated_ratio;
+                << ", Ratio " << updated_ratio
+                << ", Miss " << total_missed_num
+                << ", Cache(MB) " << total_cache_size
+                << ", Before(MB) " << total_cache_size_uncompress;
     if (changed_num == 0) {
       break;
     }

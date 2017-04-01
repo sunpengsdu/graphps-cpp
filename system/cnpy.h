@@ -15,6 +15,7 @@
 #include <cassert>
 #include <zlib.h>
 #include <map>
+#include <unordered_map>
 #include <complex>
 #include <cstdlib>
 #include <algorithm>
@@ -131,6 +132,42 @@ NpyArray npy_load(std::string fname) {
     abort();
   }
   NpyArray arr = load_the_npy_file(fp);
+  fclose(fp);
+  return arr;
+}
+
+NpyArray load_the_npy_file_to_buffer(FILE* fp, char **buffer, std::unordered_map<int, size_t> &buffer_len, int id) {
+  unsigned int* shape;
+  unsigned int ndims, word_size;
+  bool fortran_order;
+  cnpy::parse_npy_header(fp,word_size,shape,ndims,fortran_order);
+  unsigned long long size = 1; //long long so no overflow when multiplying by word_size
+  for(unsigned int i = 0; i < ndims; i++) size *= shape[i];
+  cnpy::NpyArray arr;
+  arr.word_size = word_size;
+  arr.shape = std::vector<unsigned int>(shape,shape+ndims);
+  delete[] shape;
+  // arr.data = new char[size*word_size];
+  if (buffer_len[id] < size*word_size) {
+    if (buffer_len[id] > 0) {delete [] (*buffer);}
+    buffer_len[id] = int(size*word_size*1.2);
+    *buffer = new char[int(size*word_size*1.2)];
+  }
+  arr.data = *buffer;
+  arr.fortran_order = fortran_order;
+  size_t nread = fread(arr.data, word_size, size, fp);
+  if(nread != size)
+    throw std::runtime_error("load_the_npy_file: failed fread");
+  return arr;
+}
+
+NpyArray npy_load_to_buffer(std::string fname, char **buffer, std::unordered_map<int, size_t> &buffer_len, int id) {
+  FILE* fp = fopen(fname.c_str(), "rb");
+  if(!fp) {
+    printf("npy_load: Error! Unable to open file %s!\n",fname.c_str());
+    abort();
+  }
+  NpyArray arr = load_the_npy_file_to_buffer(fp, buffer, std::ref(buffer_len), id);
   fclose(fp);
   return arr;
 }
