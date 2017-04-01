@@ -437,7 +437,7 @@ void GraphPS<T>::run() {
     }
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
     int local_comp_time = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
-    // LOG(INFO) << "Iter: " << step << " Worker: " << _my_rank << " Use: " << local_comp_time;
+    LOG(INFO) << "Iter: " << step << " Worker: " << _my_rank << " Use: " << local_comp_time;
 
     barrier_workers();
     int changed_num = 0;
