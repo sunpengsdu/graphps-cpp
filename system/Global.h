@@ -160,7 +160,7 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
     int32_t max_compressed_len = 0;
 
     if (COMPRESS_CACHE_LEVEL == 1) {
-      max_compressed_len = snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape[0]);
+      max_compressed_len = snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape);
       if (_Uncompressed_Buffer_Len[omp_id] < max_compressed_len) {
         if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
         _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
@@ -168,11 +168,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       }
       compressed_data_tmp = _Uncompressed_Buffer[omp_id];
       snappy::RawCompress(npz.data,
-                         sizeof(int32_t)*npz.shape[0],
+                         sizeof(int32_t)*npz.shape,
                          compressed_data_tmp,
                          &compressed_length);
     } else if (COMPRESS_CACHE_LEVEL == 2) {
-      size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
+      size_t buf_size = compressBound(sizeof(int32_t)*npz.shape);
       compressed_length = buf_size;
       max_compressed_len = buf_size;
       if (_Uncompressed_Buffer_Len[omp_id] < max_compressed_len) {
@@ -185,11 +185,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       compress_result = compress2((Bytef *)compressed_data_tmp,
                                 &compressed_length,
                                 (Bytef *)npz.data,
-                                sizeof(int32_t)*npz.shape[0],
+                                sizeof(int32_t)*npz.shape,
                                 1);
       assert(compress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 3) {
-      size_t buf_size = compressBound(sizeof(int32_t)*npz.shape[0]);
+      size_t buf_size = compressBound(sizeof(int32_t)*npz.shape);
       compressed_length = buf_size;
       max_compressed_len = buf_size;
       if (_Uncompressed_Buffer_Len[omp_id] < max_compressed_len) {
@@ -202,14 +202,14 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       compress_result = compress2((Bytef *)compressed_data_tmp,
                                 &compressed_length,
                                 (Bytef *)npz.data,
-                                sizeof(int32_t)*npz.shape[0],
+                                sizeof(int32_t)*npz.shape,
                                 3);
       assert(compress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 0) {
-      newdata.data = new char[sizeof(int32_t)*npz.shape[0]];
-      memcpy(newdata.data, npz.data, sizeof(int32_t)*npz.shape[0]);
-      newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
-      newdata.compressed_length = sizeof(int32_t)*npz.shape[0];
+      newdata.data = new char[sizeof(int32_t)*npz.shape];
+      memcpy(newdata.data, npz.data, sizeof(int32_t)*npz.shape);
+      newdata.uncompressed_length = sizeof(int32_t)*npz.shape;
+      newdata.compressed_length = sizeof(int32_t)*npz.shape;
     } else {
       assert (1 == 0);
     }
@@ -219,7 +219,7 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       memcpy(compressed_data, compressed_data_tmp, compressed_length);
       newdata.data = compressed_data;
       newdata.compressed_length = compressed_length;
-      newdata.uncompressed_length = sizeof(int32_t)*npz.shape[0];
+      newdata.uncompressed_length = sizeof(int32_t)*npz.shape;
     }
     _EdgeCache[p_id] = newdata;
     int32_t new_cache_size = std::ceil(newdata.compressed_length*1.0/1024/1024);

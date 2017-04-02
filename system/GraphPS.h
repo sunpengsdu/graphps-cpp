@@ -473,9 +473,11 @@ void GraphPS<T>::run() {
     int total_cache_size = _EdgeCache_Size;
     int cache_size_uncompress = _EdgeCache_Size_Uncompress;
     int total_cache_size_uncompress = _EdgeCache_Size_Uncompress;
+    ///*
     MPI_Reduce(&missed_num, &total_missed_num, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&cache_size, &total_cache_size, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&cache_size_uncompress, &total_cache_size_uncompress, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    //*/
     _Missed_Num = 0;
     stop_time_comp();
     if (_my_rank==0)
