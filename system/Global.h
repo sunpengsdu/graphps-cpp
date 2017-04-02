@@ -40,7 +40,7 @@
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
 #define GPS_INF 10000
-#define EDGE_CACHE_SIZE 60*1024 //MB
+#define EDGE_CACHE_SIZE 50*1024 //MB
 #define DENSITY_VALUE 20
 //#define USE_HDFS
 // #define USE_ASYNC

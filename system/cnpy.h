@@ -150,8 +150,8 @@ NpyArray load_the_npy_file_to_buffer(FILE* fp, char **buffer, std::unordered_map
   // arr.data = new char[size*word_size];
   if (buffer_len[id] < size*word_size) {
     if (buffer_len[id] > 0) {delete [] (*buffer);}
-    buffer_len[id] = int(size*word_size*1.2);
-    *buffer = new char[int(size*word_size*1.2)];
+    buffer_len[id] = int(size*word_size*1.5);
+    *buffer = new char[int(size*word_size*1.5)];
   }
   arr.data = *buffer;
   arr.fortran_order = fortran_order;

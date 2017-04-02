@@ -338,7 +338,7 @@ void GraphPS<T>::init(std::string DataPath,
   else
     COMPRESS_CACHE_LEVEL = 2;
   //#########################
-  COMPRESS_CACHE_LEVEL = 1;
+  COMPRESS_CACHE_LEVEL = 0;
   LOG(INFO) << "data size "  << data_size << " GB, "
             << "cache size " << cache_size << " GB, "
             << "compress level " << COMPRESS_CACHE_LEVEL;
@@ -429,7 +429,7 @@ void GraphPS<T>::run() {
       Partitions[k] = _Allocated_Partition[k];
     }
     std::random_shuffle(Partitions.begin(), Partitions.end());
-
+    
     #pragma omp parallel for num_threads(_ThreadNum) schedule(dynamic)
     for (int32_t k=0; k<Partitions.size(); k++) {
       int32_t P_ID = Partitions[k];
