@@ -26,6 +26,11 @@ bool comp_pagerank(const int32_t P_ID,
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
   char* EdgeDataNpy = load_edge(P_ID, DataPath);
+  
+  if (step == 0) {
+    return true;
+  }
+
   int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
   int32_t start_id = EdgeData[3];
   int32_t end_id = EdgeData[4];
@@ -488,7 +493,7 @@ void GraphPS<T>::run() {
                 << ", Miss " << total_missed_num
                 << ", Cache(MB) " << total_cache_size
                 << ", Before(MB) " << total_cache_size_uncompress;
-    if (changed_num == 0) {
+    if (changed_num == 0 && step > 1) {
       break;
     }
   }

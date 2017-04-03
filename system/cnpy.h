@@ -30,7 +30,7 @@ struct NpyArray {
   unsigned int word_size;
   bool fortran_order;
   void destruct() {
-    delete[] data;
+    free(data);
   }
 };
 
@@ -117,7 +117,8 @@ NpyArray load_the_npy_file(FILE* fp) {
   cnpy::NpyArray arr;
   arr.word_size = word_size;
   arr.shape = shape;
-  arr.data = new char[size*word_size];
+  arr.data = (char*)malloc(size*word_size);
+  assert(arr.data != NULL);
   arr.fortran_order = fortran_order;
   size_t nread = fread(arr.data,word_size,size,fp);
   if(nread != size)
@@ -149,9 +150,12 @@ NpyArray load_the_npy_file_to_buffer(FILE* fp, char **buffer, std::unordered_map
   arr.shape = shape;
   // arr.data = new char[size*word_size];
   if (buffer_len[id] < size*word_size) {
-    if (buffer_len[id] > 0) {delete [] (*buffer);}
+    // if (buffer_len[id] > 0) {delete [] (*buffer);}
+    if (buffer_len[id] > 0) {free(*buffer);}
     buffer_len[id] = int(size*word_size*1.5);
-    *buffer = new char[int(size*word_size*1.5)];
+    // *buffer = new char[int(size*word_size*1.5)];
+    *buffer = (char*)malloc(int(size*word_size*1.5));
+    assert(*buffer != NULL);
   }
   arr.data = *buffer;
   arr.fortran_order = fortran_order;

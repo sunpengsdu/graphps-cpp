@@ -28,6 +28,7 @@
 #include <future>
 #include <exception>
 #include <atomic>
+#include <mutex>
 #include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -40,7 +41,7 @@
 #define ZMQ_PORT 15555
 #define ZMQ_BUFFER 20*1024*1024
 #define GPS_INF 10000
-#define EDGE_CACHE_SIZE 50*1024 //MB
+#define EDGE_CACHE_SIZE 60*1024 //MB
 #define DENSITY_VALUE 20
 //#define USE_HDFS
 // #define USE_ASYNC
@@ -86,6 +87,7 @@ std::unordered_map<int, std::atomic<int>> _Edge_Buffer_Lock;
 std::unordered_map<int, char*> _Uncompressed_Buffer;
 std::unordered_map<int, size_t> _Uncompressed_Buffer_Len;
 std::unordered_map<int, std::atomic<int>> _Uncompressed_Buffer_Lock;
+std::mutex _alloc_lock;
 
 size_t GetDataSize(std::string dir_name) {
   DIR *d;
@@ -120,8 +122,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
     if (COMPRESS_CACHE_LEVEL == 1) {
       int required_len = _EdgeCache[p_id].uncompressed_length;
       if (_Edge_Buffer_Len[omp_id] < required_len) {
-        if (_Edge_Buffer_Len[omp_id] > 0) {delete [] (_Edge_Buffer[omp_id]);}
-        _Edge_Buffer[omp_id] = new char[int(required_len*1.5)];
+        // if (_Edge_Buffer_Len[omp_id] > 0) {delete [] (_Edge_Buffer[omp_id]);}
+        if (_Edge_Buffer_Len[omp_id] > 0) {free(_Edge_Buffer[omp_id]);}
+        // _Edge_Buffer[omp_id] = new char[int(required_len*1.5)];
+         _Edge_Buffer[omp_id] = (char*)malloc(int(required_len*1.5));
+         assert(_Edge_Buffer[omp_id] != NULL);
         _Edge_Buffer_Len[omp_id] = int(required_len*1.5);
       }
       uncompressed = _Edge_Buffer[omp_id];
@@ -129,8 +134,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
     } else if (COMPRESS_CACHE_LEVEL == 2 || COMPRESS_CACHE_LEVEL == 3) {
       size_t uncompressed_length = _EdgeCache[p_id].uncompressed_length;
       if (_Edge_Buffer_Len[omp_id] < uncompressed_length) {
-        if (_Edge_Buffer_Len[omp_id] > 0) {delete [] (_Edge_Buffer[omp_id]);}
-        _Edge_Buffer[omp_id] = new char[int(uncompressed_length*1.5)];
+        // if (_Edge_Buffer_Len[omp_id] > 0) {delete [] (_Edge_Buffer[omp_id]);}
+        if (_Edge_Buffer_Len[omp_id] > 0) {free(_Edge_Buffer[omp_id]);}
+        // _Edge_Buffer[omp_id] = new char[int(uncompressed_length*1.5)];
+        _Edge_Buffer[omp_id] = (char*)malloc(int(uncompressed_length*1.5));
+         assert(_Edge_Buffer[omp_id] != NULL);
         _Edge_Buffer_Len[omp_id] = int(uncompressed_length*1.5);
       }
       uncompressed = _Edge_Buffer[omp_id];
@@ -152,7 +160,7 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
   _Missed_Num++;
   cnpy::NpyArray npz = cnpy::npy_load_to_buffer(DataPath, &_Edge_Buffer[omp_id], std::ref(_Edge_Buffer_Len), omp_id);
   std::srand(std::time(0));
-  if (_EdgeCache_Size < EDGE_CACHE_SIZE && _EdgeCache.find(p_id) == _EdgeCache.end()) {
+  if (_EdgeCache_Size < EDGE_CACHE_SIZE*0.95 && _EdgeCache.find(p_id) == _EdgeCache.end()) {
     EdgeCacheData newdata;
     char* compressed_data_tmp = NULL;
     char* compressed_data = NULL;
@@ -162,8 +170,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
     if (COMPRESS_CACHE_LEVEL == 1) {
       max_compressed_len = snappy::MaxCompressedLength(sizeof(int32_t)*npz.shape);
       if (_Uncompressed_Buffer_Len[omp_id] < max_compressed_len) {
-        if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
-        _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
+        // if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
+        if (_Uncompressed_Buffer_Len[omp_id] > 0) {free(_Uncompressed_Buffer[omp_id]);}
+        // _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
+        _Uncompressed_Buffer[omp_id] = (char*)malloc(int(max_compressed_len*1.5));
+        assert(_Uncompressed_Buffer[omp_id] != NULL);
         _Uncompressed_Buffer_Len[omp_id] = int(max_compressed_len*1.5);
       }
       compressed_data_tmp = _Uncompressed_Buffer[omp_id];
@@ -176,8 +187,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       compressed_length = buf_size;
       max_compressed_len = buf_size;
       if (_Uncompressed_Buffer_Len[omp_id] < max_compressed_len) {
-        if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
-        _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
+        // if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
+        if (_Uncompressed_Buffer_Len[omp_id] > 0) {free(_Uncompressed_Buffer[omp_id]);}
+        // _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
+        _Uncompressed_Buffer[omp_id] = (char*)malloc(int(max_compressed_len*1.5));
+        assert(_Uncompressed_Buffer[omp_id] != NULL);
         _Uncompressed_Buffer_Len[omp_id] = int(max_compressed_len*1.5);
       }
       compressed_data_tmp = _Uncompressed_Buffer[omp_id];
@@ -193,8 +207,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       compressed_length = buf_size;
       max_compressed_len = buf_size;
       if (_Uncompressed_Buffer_Len[omp_id] < max_compressed_len) {
-        if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
-        _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
+        // if (_Uncompressed_Buffer_Len[omp_id] > 0) {delete [] (_Uncompressed_Buffer[omp_id]);}
+        if (_Uncompressed_Buffer_Len[omp_id] > 0) {free(_Uncompressed_Buffer[omp_id]);}
+        // _Uncompressed_Buffer[omp_id] = new char[int(max_compressed_len*1.5)];
+        _Uncompressed_Buffer[omp_id] = (char*)malloc(int(max_compressed_len*1.5));
+        assert(_Uncompressed_Buffer[omp_id] != NULL);
         _Uncompressed_Buffer_Len[omp_id] = int(max_compressed_len*1.5);
       }
       compressed_data_tmp = _Uncompressed_Buffer[omp_id];
@@ -206,7 +223,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
                                 3);
       assert(compress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 0) {
-      newdata.data = new char[sizeof(int32_t)*npz.shape];
+      // newdata.data = new char[sizeof(int32_t)*npz.shape];
+      _alloc_lock.lock();
+      newdata.data = (char*) malloc(sizeof(int32_t)*npz.shape);
+      _alloc_lock.unlock();
+      assert(newdata.data != NULL);
       memcpy(newdata.data, npz.data, sizeof(int32_t)*npz.shape);
       newdata.uncompressed_length = sizeof(int32_t)*npz.shape;
       newdata.compressed_length = sizeof(int32_t)*npz.shape;
@@ -215,7 +236,11 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
     }
 
     if (COMPRESS_CACHE_LEVEL > 0) {
-      compressed_data = new char[compressed_length];
+      // compressed_data = new char[compressed_length];
+      _alloc_lock.lock();
+      compressed_data = (char*) malloc(compressed_length);
+      _alloc_lock.unlock();
+      assert(compressed_data != NULL);
       memcpy(compressed_data, compressed_data_tmp, compressed_length);
       newdata.data = compressed_data;
       newdata.compressed_length = compressed_length;
@@ -259,14 +284,14 @@ void barrier_workers() {
 void finalize_workers() {
   LOG(INFO) << "Finalizing the application";
   zmq_ctx_destroy (_zmq_context);
-  delete [] (_all_hostname);
+  free (_all_hostname);
   for (auto t_it = _EdgeCache.begin(); t_it != _EdgeCache.end(); t_it++) {
-    delete [] t_it->second.data;
+    free(t_it->second.data);
   }
   for (int32_t i = 0; i < CMPNUM; i++) {
-    delete [] (_Send_Buffer[i]);
-    delete [] (_Edge_Buffer[i]);
-    delete [] (_Uncompressed_Buffer[i]);
+    free (_Send_Buffer[i]);
+    free (_Edge_Buffer[i]);
+    free (_Uncompressed_Buffer[i]);
   }
   MPI_Finalize();
 }
@@ -316,7 +341,9 @@ void init_workers() {
   MPI_Comm_size(MPI_COMM_WORLD, &_num_workers);
   MPI_Comm_rank(MPI_COMM_WORLD, &_my_rank);
   MPI_Get_processor_name(_hostname, &_hostname_len);
-  _all_hostname = new char[HOST_LEN * _num_workers];
+  //_all_hostname = new char[HOST_LEN * _num_workers];
+  _all_hostname = (char*)malloc(HOST_LEN * _num_workers);
+  assert(_all_hostname != NULL);
   memset(_all_hostname, 0, HOST_LEN * _num_workers);
   MPI_Allgather(_hostname, HOST_LEN, MPI_CHAR, _all_hostname, HOST_LEN, MPI_CHAR, MPI_COMM_WORLD);
   if (_my_rank == 0) {

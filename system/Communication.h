@@ -25,33 +25,6 @@ void zmq_send(const char * data, const int length, const int rank, const int id)
   zmq_close (requester);
 }
 
-void graphps_send(const char * data, const int length, const int rank) {
-  if (COMPRESS_NETWORK_LEVEL == 0) {
-    zmq_send(data, length, rank,  0);
-  } else if (COMPRESS_NETWORK_LEVEL == 1) {
-    std::string compressed_data;
-    int compressed_length = snappy::Compress(data, length, &compressed_data);
-    zmq_send(compressed_data.c_str(), compressed_length, rank, 0);
-  } else if (COMPRESS_NETWORK_LEVEL > 1) {
-    size_t compressed_length = 0;
-    char* compressed_data = NULL;
-    size_t buf_size = compressBound(length);
-    compressed_length = buf_size;
-    compressed_data = new char[buf_size];
-    int compress_result = 0;
-    compress_result = compress2((Bytef *)compressed_data,
-                              &compressed_length,
-                              (Bytef *)data,
-                              length,
-                              1);
-    assert(compress_result == Z_OK);
-    zmq_send(compressed_data, compressed_length, rank, 0);
-    delete [] (compressed_data);
-  } else {
-    assert (1 == 0);
-  }
-}
-
 template<class T>
 void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
   int  omp_id = omp_get_thread_num();
@@ -101,8 +74,11 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     size_t max_compressed_length = snappy::MaxCompressedLength(length);
     size_t compressed_length = 0;
     if (_Send_Buffer_Len[omp_id] < max_compressed_length) {
-      if (_Send_Buffer_Len[omp_id] > 0) {delete [] (_Send_Buffer[omp_id]);}
-      _Send_Buffer[omp_id] = new char[int(max_compressed_length*1.5)];
+      // if (_Send_Buffer_Len[omp_id] > 0) {delete [] (_Send_Buffer[omp_id]);}
+      if (_Send_Buffer_Len[omp_id] > 0) {free(_Send_Buffer[omp_id]);}
+      // _Send_Buffer[omp_id] = new char[int(max_compressed_length*1.5)];
+      _Send_Buffer[omp_id] = (char*)malloc(int(max_compressed_length*1.5));
+      assert(_Send_Buffer[omp_id] != NULL);
       _Send_Buffer_Len[omp_id] = int(max_compressed_length*1.5);
     }
     char *compressed_data = _Send_Buffer[omp_id];
@@ -118,8 +94,11 @@ void graphps_sendall(std::vector<T> & data_vector, int32_t changed_num) {
     int compress_result = 0;
     size_t compressed_length = 0;
     if (_Send_Buffer_Len[omp_id] < buf_size) {
-      if (_Send_Buffer_Len[omp_id] > 0) {delete [] (_Send_Buffer[omp_id]);}
-      _Send_Buffer[omp_id] = new char[int(buf_size*1.5)];
+      // if (_Send_Buffer_Len[omp_id] > 0) {delete [] (_Send_Buffer[omp_id]);}
+      if (_Send_Buffer_Len[omp_id] > 0) {free(_Send_Buffer[omp_id]);}
+      // _Send_Buffer[omp_id] = new char[int(buf_size*1.5)];
+      _Send_Buffer[omp_id] = (char*)malloc(int(buf_size*1.5));
+      assert(_Send_Buffer[omp_id] != NULL);
       _Send_Buffer_Len[omp_id] = int(buf_size*1.5);
     }
     char *compressed_data = _Send_Buffer[omp_id];
@@ -146,8 +125,12 @@ template<class T>
 void graphps_server_backend(std::vector<T>& VertexDataNew, std::vector<T>& VertexData, int32_t id) {
   void *responder = zmq_socket (_zmq_context, ZMQ_REP);
   assert(zmq_connect (responder, "inproc://graphps") == 0);
-  char *buffer = new char[ZMQ_BUFFER];
-  char *uncompressed_c = new char[ZMQ_BUFFER];
+  // char *buffer = new char[ZMQ_BUFFER];
+  char *buffer = (char*)malloc(ZMQ_BUFFER);
+  // char *uncompressed_c = new char[ZMQ_BUFFER];
+  char *uncompressed_c = (char *)malloc(ZMQ_BUFFER);
+  assert(buffer != NULL);
+  assert(uncompressed_c != NULL);
   size_t uncompressed_length;
   memset(buffer, 0, ZMQ_BUFFER);
   while (1) {
