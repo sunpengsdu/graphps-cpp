@@ -23,14 +23,10 @@ bool comp_pagerank(const int32_t P_ID,
                    const int32_t step) {
   // std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
   _Computing_Num++;
+  int omp_id = omp_get_thread_num();
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
   char* EdgeDataNpy = load_edge(P_ID, DataPath);
-  
-  if (step == 0) {
-    return true;
-  }
-
   int32_t *EdgeData = reinterpret_cast<int32_t*>(EdgeDataNpy);
   int32_t start_id = EdgeData[3];
   int32_t end_id = EdgeData[4];
@@ -39,7 +35,14 @@ bool comp_pagerank(const int32_t P_ID,
   int32_t * indices = EdgeData + 5;
   int32_t * indptr = EdgeData + 5 + indices_len;
   int32_t vertex_num = VertexNum;
-  std::vector<T> result(end_id-start_id+5, 0);
+  int32_t required_len = sizeof(T)*(end_id-start_id+5);
+  if (_Result_Buffer_Len[omp_id] < required_len) {
+    if (_Result_Buffer_Len[omp_id] > 0) {free(_Result_Buffer[omp_id]);}
+    _Result_Buffer[omp_id] = (char*)malloc(int(required_len*1.5));
+    _Result_Buffer_Len[omp_id] = (int)(required_len*1.5);
+    assert(_Result_Buffer[omp_id] != NULL);
+  }
+  T* result = reinterpret_cast<T*>(_Result_Buffer[omp_id]);
   result[end_id-start_id+4] = 0; //sparsity ratio
   result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
   result[end_id-start_id+2] = (int32_t)start_id%10000;
@@ -52,7 +55,6 @@ bool comp_pagerank(const int32_t P_ID,
   int changed_num = 0;
   // std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
   // int load_time = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
-
   for (i=0; i < end_id-start_id; i++) {
     rel = 0;
     for (k = 0; k < indptr[i+1] - indptr[i]; k++) {
@@ -65,29 +67,20 @@ bool comp_pagerank(const int32_t P_ID,
       changed_num++;
 #ifdef USE_ASYNC
       VertexData[start_id+i] = rel;
+#else 
+      VertexDataNew[start_id+i] = rel;
 #endif
+    } else {
+      result[i] = 0;
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
-
   // std::chrono::steady_clock::time_point t3 = std::chrono::steady_clock::now();
   // int comp_time = std::chrono::duration_cast<std::chrono::milliseconds>(t3-t2).count();
-
-#ifdef USE_ASYNC
-//  for (int32_t k=0; k<(end_id-start_id); k++) {
-//    VertexData[k+start_id] += result[k];
-//  }
-#else
-  for (int32_t k=0; k<(end_id-start_id); k++) {
-    VertexDataNew[k+start_id] = result[k];
-  }
-#endif
-
   _Computing_Num--;
   if (changed_num > 0)
-    graphps_sendall<T>(std::ref(result), changed_num);
-
+    graphps_sendall<T>(result, changed_num, end_id-start_id+5);
   // std::chrono::steady_clock::time_point t4 = std::chrono::steady_clock::now();
   // int commu_time = std::chrono::duration_cast<std::chrono::milliseconds>(t4-t3).count();
  // LOG(INFO) << std::string(_all_hostname + _my_rank*HOST_LEN)  
@@ -108,6 +101,7 @@ bool comp_sssp(const int32_t P_ID,
                std::vector<bool>& ActiveVector,
                const int32_t step) {
   _Computing_Num++;
+  int omp_id = omp_get_thread_num();
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
   char* EdgeDataNpy = load_edge(P_ID, DataPath);
@@ -119,7 +113,15 @@ bool comp_sssp(const int32_t P_ID,
   int32_t * indices = EdgeData + 5;
   int32_t * indptr = EdgeData + 5 + indices_len;
   int32_t vertex_num = VertexNum;
-  std::vector<T> result(end_id-start_id+5, 0);
+
+  int32_t required_len = sizeof(T)*(end_id-start_id+5);
+  if (_Result_Buffer_Len[omp_id] < required_len) {
+    if (_Result_Buffer_Len[omp_id] > 0) {free(_Result_Buffer[omp_id]);}
+    _Result_Buffer[omp_id] = (char*)malloc(int(required_len*1.5));
+    _Result_Buffer_Len[omp_id] = (int)(required_len*1.5);
+    assert(_Result_Buffer[omp_id] != NULL);
+  }
+  T* result = reinterpret_cast<T*>(_Result_Buffer[omp_id]);
   result[end_id-start_id+4] = 0;
   result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
   result[end_id-start_id+2] = (int32_t)start_id%10000;
@@ -143,25 +145,18 @@ bool comp_sssp(const int32_t P_ID,
       changed_num++;
 #ifdef USE_ASYNC
       VertexData[start_id+i] = min;
+#else
+      VertexDataNew[start_id+i] = min;
 #endif
+    } else {
+      result[i] = 0;
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
-
-#ifdef USE_ASYNC
-//  for (int32_t k=0; k<(end_id-start_id); k++) {
-//    VertexData[k+start_id] += result[k];
-//  }
-#else
-  for (int32_t k=0; k<(end_id-start_id); k++) {
-    VertexDataNew[k+start_id] = result[k];
-  }
-#endif
-
   _Computing_Num--;
   if (changed_num > 0) {
-    graphps_sendall<T>(std::ref(result), changed_num);
+    graphps_sendall<T>(result, changed_num, end_id-start_id+5);
   }
   return true;
 }
@@ -178,6 +173,7 @@ bool comp_cc(const int32_t P_ID,
              std::vector<bool>& ActiveVector,
              const int32_t step) {
   _Computing_Num++;
+  int omp_id = omp_get_thread_num();
   DataPath += std::to_string(P_ID);
   DataPath += ".edge.npy";
   // LOG(INFO) << "Processing " << DataPath;
@@ -190,7 +186,14 @@ bool comp_cc(const int32_t P_ID,
   int32_t * indices = EdgeData + 5;
   int32_t * indptr = EdgeData + 5 + indices_len;
   int32_t vertex_num = VertexNum;
-  std::vector<T> result(end_id-start_id+5, 0);
+  int32_t required_len = sizeof(T)*(end_id-start_id+5);
+  if (_Result_Buffer_Len[omp_id] < required_len) {
+    if (_Result_Buffer_Len[omp_id] > 0) {free(_Result_Buffer[omp_id]);}
+    _Result_Buffer[omp_id] = (char*)malloc(int(required_len*1.5));
+    _Result_Buffer_Len[omp_id] = (int)(required_len*1.5);
+    assert(_Result_Buffer[omp_id] != NULL);
+  }
+  T* result = reinterpret_cast<T*>(_Result_Buffer[omp_id]);
   result[end_id-start_id+4] = 0;
   result[end_id-start_id+3] = (int32_t)std::floor(start_id*1.0/10000);
   result[end_id-start_id+2] = (int32_t)start_id%10000;
@@ -211,25 +214,18 @@ bool comp_cc(const int32_t P_ID,
       changed_num++;
 #ifdef USE_ASYNC
       VertexData[start_id+i] = max;
+#else
+      VertexDataNew[start_id+i] = max;
 #endif
+    } else {
+      result[i] = 0;
     }
   }
   clean_edge(P_ID, EdgeDataNpy);
   result[end_id-start_id+4] = (int32_t)changed_num*100.0/(end_id-start_id); //sparsity ratio
-
-#ifdef USE_ASYNC
-//  for (int32_t k=0; k<(end_id-start_id); k++) {
-//    VertexData[k+start_id] += result[k];
-//  }
-#else
-  for (int32_t k=0; k<(end_id-start_id); k++) {
-    VertexDataNew[k+start_id] = result[k];
-  }
-#endif
-
   _Computing_Num--;
   if (changed_num > 0)
-    graphps_sendall<T>(std::ref(result), changed_num);
+    graphps_sendall<T>(result, changed_num, end_id-start_id+5);
   return true;
 }
 
@@ -334,6 +330,12 @@ void GraphPS<T>::init(std::string DataPath,
     _Uncompressed_Buffer[i] = NULL;
     _Uncompressed_Buffer_Len[i] = 0;
     _Uncompressed_Buffer_Lock[i] = 0;
+    _Sparse_Result_Buffer[i] = NULL;
+    _Sparse_Result_Buffer_Len[i] = 0;
+    _Sparse_Result_Buffer_Lock[i] = 0;
+    _Result_Buffer[i] = NULL;
+    _Result_Buffer_Len[i] = 0;
+    _Result_Buffer_Lock[i] = 0;
   }
   int32_t data_size = GetDataSize(DataPath) * 1.0 / 1024 / 1024 / 1024; //GB 
   int32_t cache_size = _num_workers * EDGE_CACHE_SIZE / 1024; //GB
@@ -414,11 +416,12 @@ void GraphPS<T>::run() {
   float updated_ratio = 1.0;
   int32_t step = 0;
 
-#ifdef USE_ASYNC
+//#ifdef USE_ASYNC
   _VertexDataNew.assign(_VertexData.begin(), _VertexData.end());
-#else
-  std::fill(_VertexDataNew.begin(), _VertexDataNew.end(), 0);
-#endif
+//#else
+//  std::fill(_VertexDataNew.begin(), _VertexDataNew.end(), 0);
+//#endif
+
   barrier_workers();
   stop_time_init();
   if (_my_rank==0)
@@ -445,29 +448,22 @@ void GraphPS<T>::run() {
     }
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
     int local_comp_time = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
-    LOG(INFO) << "Iter: " << step << " Worker: " << _my_rank << " Use: " << local_comp_time;
+    // LOG(INFO) << "Iter: " << step << " Worker: " << _my_rank << " Use: " << local_comp_time;
 
     barrier_workers();
     int changed_num = 0;
     #pragma omp parallel for num_threads(_ThreadNum) reduction (+:changed_num)  schedule(static)
     for (int32_t result_id = 0; result_id < _VertexNum; result_id++) {
-#ifdef USE_ASYNC
       if (_VertexDataNew[result_id] == _VertexData[result_id]) {
         _UpdatedLastIter[result_id] = false;
       } else {
         _UpdatedLastIter[result_id] = true;
         changed_num += 1;
       }
+#ifdef USE_ASYNC
       _VertexDataNew[result_id] = _VertexData[result_id];
 #else
-      _VertexData[result_id] += _VertexDataNew[result_id];
-      if (_VertexDataNew[result_id] == 0) {
-        _UpdatedLastIter[result_id] = false;
-      } else {
-        _UpdatedLastIter[result_id] = true;
-        changed_num += 1;
-      }
-      _VertexDataNew[result_id] = 0;
+      _VertexData[result_id] = _VertexDataNew[result_id];
 #endif
     }
     updated_ratio = changed_num * 1.0 / _VertexNum;
@@ -478,12 +474,20 @@ void GraphPS<T>::run() {
     int total_cache_size = _EdgeCache_Size;
     int cache_size_uncompress = _EdgeCache_Size_Uncompress;
     int total_cache_size_uncompress = _EdgeCache_Size_Uncompress;
+    long network_compress = _Network_Compressed;
+    long network_uncompress = _Network_Uncompressed;
+    long total_network_compress = _Network_Compressed;
+    long total_network_uncompress = _Network_Uncompressed;
     ///*
     MPI_Reduce(&missed_num, &total_missed_num, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&cache_size, &total_cache_size, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&cache_size_uncompress, &total_cache_size_uncompress, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&network_compress, &total_network_compress, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&network_uncompress, &total_network_uncompress, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     //*/
     _Missed_Num = 0;
+    _Network_Compressed = 0;
+    _Network_Uncompressed = 0;
     stop_time_comp();
     if (_my_rank==0)
       LOG(INFO) << "Iteration: " << step
@@ -492,7 +496,10 @@ void GraphPS<T>::run() {
                 << ", Ratio " << updated_ratio
                 << ", Miss " << total_missed_num
                 << ", Cache(MB) " << total_cache_size
-                << ", Before(MB) " << total_cache_size_uncompress;
+                << ", Before(MB) " << total_cache_size_uncompress
+                << ", Compress Net(MB) " << total_network_compress*1.0/1024/1024
+                << ", Uncompress Net(MB) " << total_network_uncompress*1.0/1024/1024;
+
     if (changed_num == 0 && step > 1) {
       break;
     }

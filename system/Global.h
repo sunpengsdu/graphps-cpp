@@ -39,7 +39,7 @@
 #define HOST_LEN 20
 #define ZMQ_PREFIX "tcp://*:"
 #define ZMQ_PORT 15555
-#define ZMQ_BUFFER 20*1024*1024
+#define ZMQ_BUFFER 50*1024*1024
 #define GPS_INF 10000
 #define EDGE_CACHE_SIZE 60*1024 //MB
 #define DENSITY_VALUE 20
@@ -78,6 +78,8 @@ std::atomic<int32_t> _EdgeCache_Size;
 std::atomic<int32_t> _EdgeCache_Size_Uncompress;
 std::atomic<int32_t> _Computing_Num;
 std::atomic<int32_t> _Missed_Num;
+std::atomic<long> _Network_Compressed;
+std::atomic<long> _Network_Uncompressed;
 std::unordered_map<int, char*> _Send_Buffer;
 std::unordered_map<int, size_t> _Send_Buffer_Len;
 std::unordered_map<int, std::atomic<int>> _Send_Buffer_Lock;
@@ -87,6 +89,12 @@ std::unordered_map<int, std::atomic<int>> _Edge_Buffer_Lock;
 std::unordered_map<int, char*> _Uncompressed_Buffer;
 std::unordered_map<int, size_t> _Uncompressed_Buffer_Len;
 std::unordered_map<int, std::atomic<int>> _Uncompressed_Buffer_Lock;
+std::unordered_map<int, char*> _Result_Buffer;
+std::unordered_map<int, size_t> _Result_Buffer_Len;
+std::unordered_map<int, std::atomic<int>> _Result_Buffer_Lock;
+std::unordered_map<int, char*> _Sparse_Result_Buffer;
+std::unordered_map<int, size_t> _Sparse_Result_Buffer_Len;
+std::unordered_map<int, std::atomic<int>> _Sparse_Result_Buffer_Lock;
 std::mutex _alloc_lock;
 
 size_t GetDataSize(std::string dir_name) {
@@ -224,9 +232,7 @@ char *load_edge(int32_t p_id, std::string &DataPath) {
       assert(compress_result == Z_OK);
     } else if (COMPRESS_CACHE_LEVEL == 0) {
       // newdata.data = new char[sizeof(int32_t)*npz.shape];
-      _alloc_lock.lock();
       newdata.data = (char*) malloc(sizeof(int32_t)*npz.shape);
-      _alloc_lock.unlock();
       assert(newdata.data != NULL);
       memcpy(newdata.data, npz.data, sizeof(int32_t)*npz.shape);
       newdata.uncompressed_length = sizeof(int32_t)*npz.shape;
@@ -292,6 +298,7 @@ void finalize_workers() {
     free (_Send_Buffer[i]);
     free (_Edge_Buffer[i]);
     free (_Uncompressed_Buffer[i]);
+    free (_Result_Buffer[i]);
   }
   MPI_Finalize();
 }
@@ -357,6 +364,8 @@ void init_workers() {
   _EdgeCache_Size_Uncompress = 0;
   _Computing_Num = 0;
   _Missed_Num = 0;
+  _Network_Compressed = 0;
+  _Network_Uncompressed = 0;
   barrier_workers();
   COMPRESS_NETWORK_LEVEL = 1;  //0, 1, 2
   COMPRESS_CACHE_LEVEL = 1; //0, 1, 2, 3
