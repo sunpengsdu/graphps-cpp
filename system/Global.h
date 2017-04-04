@@ -45,7 +45,7 @@
 #define DENSITY_VALUE 20
 //#define USE_HDFS
 // #define USE_ASYNC
-#define ZMQNUM 16
+#define ZMQNUM 23
 #define CMPNUM 23
 
 int COMPRESS_NETWORK_LEVEL;  //0, 1, 2
@@ -80,6 +80,7 @@ std::atomic<int32_t> _Computing_Num;
 std::atomic<int32_t> _Missed_Num;
 std::atomic<long> _Network_Compressed;
 std::atomic<long> _Network_Uncompressed;
+std::atomic<int32_t> _Pending_Requests;
 std::unordered_map<int, char*> _Send_Buffer;
 std::unordered_map<int, size_t> _Send_Buffer_Len;
 std::unordered_map<int, std::atomic<int>> _Send_Buffer_Lock;
@@ -95,6 +96,7 @@ std::unordered_map<int, std::atomic<int>> _Result_Buffer_Lock;
 std::unordered_map<int, char*> _Sparse_Result_Buffer;
 std::unordered_map<int, size_t> _Sparse_Result_Buffer_Len;
 std::unordered_map<int, std::atomic<int>> _Sparse_Result_Buffer_Lock;
+std::unordered_map<int, std::unordered_map<int, void*>> _Socket_Pool;
 std::mutex _alloc_lock;
 
 size_t GetDataSize(std::string dir_name) {
@@ -300,6 +302,11 @@ void finalize_workers() {
     free (_Uncompressed_Buffer[i]);
     free (_Result_Buffer[i]);
   }
+  for (auto& Sockets:_Socket_Pool) {
+    for (auto & Socket: Sockets.second) {
+      zmq_close(Socket.second);
+    }
+  }
   MPI_Finalize();
 }
 
@@ -364,6 +371,7 @@ void init_workers() {
   _EdgeCache_Size_Uncompress = 0;
   _Computing_Num = 0;
   _Missed_Num = 0;
+  _Pending_Requests = 0;
   _Network_Compressed = 0;
   _Network_Uncompressed = 0;
   barrier_workers();
